@@ -253,8 +253,8 @@ What makes this possible, for any config:
   opens or closes it from a script (on media_change, for example), and items can subscribe to
   `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
   one at the top middle of the main display. `notch.glass=on` (or `clear`): the same shape on the same
-  springs, of glass (the bar's glass engine, `notch.color` its tint); closed, it is the black
-  notch. examples/liquid-glass.toml has one.
+  springs, of glass (the bar's glass engine, `notch.color` its tint), closed too: with
+  `notch.closed_width` / `closed_height` larger than the camera's notch, glass around it. examples/liquid-glass.toml has one.
 
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes

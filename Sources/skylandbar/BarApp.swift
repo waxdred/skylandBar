@@ -863,15 +863,14 @@ final class BarApp {
         }
         window.configureNotch(frame: frame, open: p > 0)
         var style = PanelStyle()
-        let glassy = (notch.options["glass"] ?? "off") != "off"
-        style.color = glassy ? .black : notch.options["color"].flatMap(ARGB.parse) ?? .black // glass: color is its tint, closed is black
+        style.color = notch.options["color"].flatMap(ARGB.parse) ?? .black
         style.cornerRadius = mix(closed.radius, open.radius, p)
         style.notch = true
         style.flare = mix(flare, openFlare, min(p, 1))
         // notch.glass: the same shape on the same spring, of glass (the bar's engine, notch.color
-        // its tint); its top runs off the screen so only the bottom corners round. Closed, it is
-        // the black notch, which takes the mouse.
-        if let glass = notch.options["glass"], glass != "off", p > 0 {
+        // its tint), closed too: glass around the camera's notch (closed_width wider than it);
+        // its top runs off the screen so only the bottom corners round
+        if let glass = notch.options["glass"], glass != "off" {
             style.glass = glass
             style.color = notch.options["color"].flatMap(ARGB.parse) ?? .clear
             style.glassRect = NSRect(x: style.flare, y: -style.cornerRadius, width: width - 2 * style.flare, height: height + style.cornerRadius)
