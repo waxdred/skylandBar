@@ -29,6 +29,52 @@ public struct ShadowProps: Equatable {
     }
 }
 
+/// An image drawn in a background: a file, `app.<bundle id or name>` (its icon) or
+/// `media.artwork` (the now playing artwork).
+public struct ImageProps: Equatable {
+    public var string = ""
+    public var drawing = true
+    public var scale = 1.0
+    public var cornerRadius = 0.0
+    public var borderWidth = 0.0
+    public var borderColor = ARGB.clear
+    public var paddingLeft = 0.0
+    public var paddingRight = 0.0
+    public var yOffset = 0.0
+    public var shadow = ShadowProps()
+
+    public init() {}
+
+    public var isShown: Bool { drawing && !string.isEmpty }
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "string":
+                string = value
+                return nil
+            case "drawing": return Value.setBool(&drawing, value)
+            case "scale": return Value.setNumber(&scale, value, minimum: 0)
+            case "corner_radius": return Value.setNumber(&cornerRadius, value, minimum: 0)
+            case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
+            case "border_color": return Value.setColor(&borderColor, value, part: rest)
+            case "padding_left": return Value.setNumber(&paddingLeft, value)
+            case "padding_right": return Value.setNumber(&paddingRight, value)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "shadow": return rest.map { shadow.apply($0, value) } ?? Value.setBool(&shadow.drawing, value)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "value": string, "drawing": drawing ? "on" : "off", "scale": scale, "corner_radius": cornerRadius,
+            "border_width": borderWidth, "border_color": borderColor.description,
+            "padding_left": paddingLeft, "padding_right": paddingRight, "y_offset": yOffset, "shadow": shadow.json,
+        ]
+    }
+}
+
 public struct BackgroundProps: Equatable {
     public var drawing = false
     public var color = ARGB.clear
@@ -41,10 +87,10 @@ public struct BackgroundProps: Equatable {
     public var xOffset = 0.0
     public var yOffset = 0.0
     public var clip = 0.0
-    /// a file, `app.<bundle id>` or `media`; drawn from milestone 2, kept meanwhile
-    public var image = ""
-    public var imageProps: [String: String] = [:]
+    public var image = ImageProps()
     public var shadow = ShadowProps()
+    /// skylandbar: Liquid Glass (macOS 26) tinted with `color`: off | regular | clear
+    public var glass = "off"
 
     public init() {}
 
@@ -52,8 +98,9 @@ public struct BackgroundProps: Equatable {
         let (head, rest) = splitKey(key)
         switch head {
             case "drawing": return Value.setBool(&drawing, value)
-            case "color": return Value.setColor(&color, value, part: rest)
-            case "border_color": return Value.setColor(&borderColor, value, part: rest)
+            // like sketchybar, giving a background a color, a border or an image draws it
+            case "color": return enable(Value.setColor(&color, value, part: rest))
+            case "border_color": return enable(Value.setColor(&borderColor, value, part: rest))
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
             case "height": return Value.setNumber(&height, value, minimum: 0)
             case "corner_radius": return Value.setNumber(&cornerRadius, value, minimum: 0)
@@ -63,11 +110,20 @@ public struct BackgroundProps: Equatable {
             case "y_offset": return Value.setNumber(&yOffset, value)
             case "clip": return Value.setNumber(&clip, value, minimum: 0)
             case "image":
-                if let rest { imageProps[rest] = value } else { image = value }
-                return nil
+                guard let rest else {
+                    image.string = value
+                    return enable(nil)
+                }
+                return image.apply(rest, value)
             case "shadow": return rest.map { shadow.apply($0, value) } ?? Value.setBool(&shadow.drawing, value)
+            case "glass": return Value.setGlass(&glass, value)
             default: return unknownProperty
         }
+    }
+
+    private mutating func enable(_ error: String?) -> String? {
+        if error == nil { drawing = true }
+        return error
     }
 
     public var json: [String: Any] {
@@ -75,7 +131,7 @@ public struct BackgroundProps: Equatable {
             "drawing": drawing ? "on" : "off", "color": color.description, "border_color": borderColor.description,
             "border_width": borderWidth, "height": height, "corner_radius": cornerRadius,
             "padding_left": paddingLeft, "padding_right": paddingRight, "x_offset": xOffset, "y_offset": yOffset,
-            "clip": clip, "image": image, "shadow": shadow.json,
+            "clip": clip, "image": image.json, "shadow": shadow.json, "glass": glass,
         ]
     }
 }
@@ -104,6 +160,18 @@ public struct TextProps: Equatable {
     /// The text as drawn: `max_chars` cut.
     public var shown: String {
         maxChars > 0 && string.count > maxChars ? String(string.prefix(maxChars)) : string
+    }
+
+    /// Whether `scroll_texts` moves it: longer than `max_chars`.
+    public var scrolls: Bool { maxChars > 0 && string.count > maxChars }
+
+    /// With `scroll_texts`: the `max_chars` characters `step` characters into the text,
+    /// which loops with three spaces between the end and the start.
+    public func scrolled(_ step: Int) -> String {
+        guard scrolls else { return shown }
+        let loop = Array(string + "   ")
+        let start = step % loop.count
+        return String((0 ..< maxChars).map { loop[(start + $0) % loop.count] })
     }
 
     public mutating func apply(_ key: String, _ value: String) -> String? {
@@ -193,7 +261,11 @@ public struct ItemProps: Equatable {
     public var icon = TextProps()
     public var label = TextProps()
     public var background = BackgroundProps()
-    /// popup.*, graph.*, slider.*, alias.*: milestone 2, kept meanwhile so configs load
+    public var popup = PopupProps()
+    public var graph = GraphProps()
+    public var slider = SliderProps()
+    public var alias = AliasProps()
+    /// mach_helper, shadow...: taken so configs load, not used
     public var extra: [String: String] = [:]
 
     public init() {}
@@ -252,7 +324,11 @@ public struct ItemProps: Equatable {
                 updates = on ? "on" : "off"
                 return nil
             case "background": return rest.map { background.apply($0, value) } ?? unknownProperty
-            case "popup", "graph", "slider", "alias", "mach_helper", "shadow":
+            case "popup": return rest.map { popup.apply($0, value) } ?? unknownProperty
+            case "graph": return rest.map { graph.apply($0, value) } ?? unknownProperty
+            case "slider": return rest.map { slider.apply($0, value) } ?? unknownProperty
+            case "alias": return rest.map { alias.apply($0, value) } ?? unknownProperty
+            case "mach_helper", "shadow":
                 extra[key] = value
                 return nil
             default: return unknownProperty
@@ -281,6 +357,148 @@ public struct ItemProps: Equatable {
             "background": background.json,
         ]
     }
+
+    /// Whether the item goes on the bar while these Mission Control spaces are shown
+    /// (`space` lists them; `all` or `ignore_association`: always).
+    public func isShown(onSpaces current: [Int]) -> Bool {
+        if space == "all" || ignoreAssociation || current.isEmpty { return true }
+        return space.split(separator: ",").compactMap { Int($0) }.contains { current.contains($0) }
+    }
+}
+
+/// The items with `position=popup.<this item>`, in a window under (or over) the item.
+public struct PopupProps: Equatable {
+    public var drawing = false
+    public var horizontal = false
+    public var topmost = true
+    /// the height of each row, 0: the bar's height
+    public var height = 0.0
+    public var blurRadius = 0.0
+    public var yOffset = 0.0
+    /// left | center | right, against the item
+    public var align = "left"
+    public var background = BackgroundProps()
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "drawing": return Value.setBool(&drawing, value)
+            case "horizontal": return Value.setBool(&horizontal, value)
+            case "topmost": return Value.setBool(&topmost, value)
+            case "height": return Value.setNumber(&height, value, minimum: 0)
+            case "blur_radius": return Value.setNumber(&blurRadius, value, minimum: 0)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "align": return Value.oneOf(&align, value, ["left", "center", "right"])
+            case "background": return rest.map { background.apply($0, value) } ?? unknownProperty
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "drawing": drawing ? "on" : "off", "horizontal": horizontal ? "on" : "off", "topmost": topmost ? "on" : "off",
+            "height": height, "blur_radius": blurRadius, "y_offset": yOffset, "align": align, "background": background.json,
+        ]
+    }
+}
+
+/// `--add graph <name> <position> <width>`: values from 0 to 1 given with `--push`, the
+/// newest on the right, one point each.
+public struct GraphProps: Equatable {
+    public var width = 0.0
+    public var color = ARGB(0xCCCC_CCCC)
+    /// nil: `color` at a third of its opacity
+    public var fillColor: ARGB? = nil
+    public var lineWidth = 0.5
+
+    public init() {}
+
+    public var fill: ARGB { fillColor ?? color.withAlpha(color.alpha / 3) }
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "fill_color":
+                var fill = self.fill
+                if let error = Value.setColor(&fill, value, part: rest) { return error }
+                fillColor = fill
+                return nil
+            case "line_width": return Value.setNumber(&lineWidth, value, minimum: 0)
+            case "width": return Value.setNumber(&width, value, minimum: 0)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        ["width": width, "color": color.description, "fill_color": fill.description, "line_width": lineWidth]
+    }
+}
+
+/// `--add slider <name> <position> <width>`: a track (`slider.background`), its filled
+/// part (`slider.highlight_color`) and a knob (a text); dragging it sends `mouse.clicked`
+/// with PERCENTAGE.
+public struct SliderProps: Equatable {
+    public var width = 0.0
+    public var percentage = 0.0
+    public var highlightColor = ARGB(0xFF00_00FF)
+    public var background = BackgroundProps()
+    public var knob = TextProps()
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "percentage":
+                var percent = percentage
+                if let error = Value.setNumber(&percent, value) { return error }
+                percentage = min(100, max(0, percent))
+                return nil
+            case "highlight_color": return Value.setColor(&highlightColor, value, part: rest)
+            case "width": return Value.setNumber(&width, value, minimum: 0)
+            case "background": return rest.map { background.apply($0, value) } ?? unknownProperty
+            case "knob":
+                guard let rest else {
+                    knob.string = value
+                    return nil
+                }
+                return knob.apply(rest, value)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "width": width, "percentage": percentage, "highlight_color": highlightColor.description,
+            "background": background.json, "knob": knob.json,
+        ]
+    }
+}
+
+/// `--add alias "<application>,<item>" <position>`: a copy of a menu bar item.
+public struct AliasProps: Equatable {
+    /// a tint, clear: the item's own colors
+    public var color = ARGB.clear
+    public var scale = 1.0
+    /// seconds between captures
+    public var updateFreq = 1.0
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "scale": return Value.setNumber(&scale, value, minimum: 0)
+            case "update_freq": return Value.setNumber(&updateFreq, value, minimum: 0.1)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] { ["color": color.description, "scale": scale, "update_freq": updateFreq] }
 }
 
 public struct BarProps: Equatable {
@@ -309,6 +527,8 @@ public struct BarProps: Equatable {
     public var sticky = true
     public var fontSmoothing = false
     public var shadow = false
+    /// skylandbar: Liquid Glass (macOS 26) tinted with `color`: off | regular | clear
+    public var glass = "off"
 
     public init() {}
 
@@ -356,6 +576,7 @@ public struct BarProps: Equatable {
             case "sticky": return Value.setBool(&sticky, value)
             case "font_smoothing": return Value.setBool(&fontSmoothing, value)
             case "shadow": return Value.setBool(&shadow, value)
+            case "glass": return Value.setGlass(&glass, value)
             default: return unknownProperty
         }
     }
@@ -376,7 +597,7 @@ public struct BarProps: Equatable {
             "margin": margin, "notch_display_height": notchDisplayHeight, "notch_width": notchWidth, "notch_offset": notchOffset,
             "display": display, "color": color.description, "border_color": borderColor.description, "border_width": borderWidth,
             "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
-            "padding_left": paddingLeft, "padding_right": paddingRight,
+            "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass,
         ]
     }
 }

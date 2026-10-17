@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "skylandbar",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         .executable(name: "skylandbar", targets: ["skylandbar"]),
         .library(name: "SkylandBarCore", targets: ["SkylandBarCore"]),
@@ -22,6 +22,8 @@ let package = Package(
                 .linkedFramework("IOKit"),
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("AudioToolbox"),
+                .linkedFramework("CoreWLAN"),
+                .linkedFramework("ScreenCaptureKit"),
             ]
         ),
         .testTarget(name: "SkylandBarCoreTests", dependencies: ["SkylandBarCore"]),

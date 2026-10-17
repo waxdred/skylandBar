@@ -35,7 +35,22 @@ public struct ARGB: Equatable, Hashable, CustomStringConvertible {
     }
 
     public var description: String { String(format: "0x%08x", value) }
+
+    /// Channel by channel from `a` (t = 0) to `b` (t = 1).
+    public static func mix(_ a: ARGB, _ b: ARGB, _ t: Double) -> ARGB {
+        if a == b { return b }
+        var result: UInt32 = 0
+        for shift in stride(from: 24, through: 0, by: -8) {
+            let from = Double(a.value >> UInt32(shift) & 0xFF), to = Double(b.value >> UInt32(shift) & 0xFF)
+            let channel = UInt32(min(255, max(0, (from + (to - from) * t).rounded())))
+            result |= channel << UInt32(shift)
+        }
+        return ARGB(result)
+    }
 }
+
+/// From `a` (t = 0) to `b` (t = 1).
+public func mix(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
 
 /// A font as sketchybar writes it: "Family:Style:Size", e.g. "Hack Nerd Font:Bold:14.0".
 public struct FontSpec: Equatable, Hashable, CustomStringConvertible {
@@ -121,6 +136,18 @@ enum Value {
         }
         guard let color = ARGB.parse(text) else { return "'\(text)' is not a color (0xAARRGGBB)" }
         target = color
+        return nil
+    }
+
+    /// skylandbar's Liquid Glass: off, regular (on) or clear
+    static func setGlass(_ target: inout String, _ text: String) -> String? {
+        switch text.lowercased() {
+            case "on", "yes", "true", "regular": target = "regular"
+            case "off", "no", "false": target = "off"
+            case "clear": target = "clear"
+            case "toggle": target = target == "off" ? "regular" : "off"
+            default: return "'\(text)' is not on, off, regular or clear"
+        }
         return nil
     }
 

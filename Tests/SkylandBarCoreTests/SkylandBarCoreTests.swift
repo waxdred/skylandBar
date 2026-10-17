@@ -71,7 +71,7 @@ final class PropertyTests: XCTestCase {
         XCTAssertNil(props.apply("drawing", "toggle"))
         XCTAssertNil(props.apply("width", "120"))
         XCTAssertNil(props.apply("updates", "when_shown"))
-        XCTAssertNil(props.apply("popup.drawing", "on")) // kept for milestone 2
+        XCTAssertNil(props.apply("popup.drawing", "on"))
         XCTAssertEqual(props.icon.string, "󰀵")
         XCTAssertEqual(props.icon.font, FontSpec(family: "SF Pro", style: "Semibold", size: 15))
         XCTAssertEqual(props.label.color.value, 0x80CD_D6F4)
@@ -80,6 +80,8 @@ final class PropertyTests: XCTestCase {
         XCTAssertTrue(props.label.shadow.drawing)
         XCTAssertFalse(props.drawing)
         XCTAssertEqual(props.width, 120)
+        XCTAssertTrue(props.popup.drawing)
+        XCTAssertNotNil(props.apply("popup.nope", "1"))
         XCTAssertNotNil(props.apply("position", "middle"))
         XCTAssertNotNil(props.apply("label.color", "blue"))
         XCTAssertNotNil(props.apply("nope", "1"))
@@ -182,5 +184,185 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual((item["label"] as? [String: Any])?["value"] as? String, "12:00")
         XCTAssertNotNil((item["bounding_rects"] as? [String: Any])?["display-1"])
         XCTAssertFalse(run(model, ["--query", "nothing"]).errors.isEmpty)
+    }
+}
+
+final class ComponentTests: XCTestCase {
+    func testBackgroundsDrawOnceColored() {
+        var props = ItemProps()
+        XCTAssertFalse(props.background.drawing)
+        XCTAssertNil(props.apply("background.color", "0xff112233"))
+        XCTAssertTrue(props.background.drawing) // like sketchybar
+        XCTAssertNil(props.apply("background.drawing", "off"))
+        XCTAssertNil(props.apply("icon.background.image", "app.com.apple.finder"))
+        XCTAssertTrue(props.icon.background.drawing)
+        XCTAssertEqual(props.icon.background.image.string, "app.com.apple.finder")
+        XCTAssertNil(props.apply("icon.background.image.scale", "0.5"))
+        XCTAssertEqual(props.icon.background.image.scale, 0.5)
+        XCTAssertNil(props.apply("background.glass", "on"))
+        XCTAssertEqual(props.background.glass, "regular")
+        XCTAssertNotNil(props.apply("background.glass", "frosted"))
+    }
+
+    func testPopupsAndBrackets() {
+        let model = BarModel()
+        _ = run(model, ["--add", "item", "apple", "left", "--set", "apple", "popup.drawing=toggle", "popup.align=center", "popup.background.color=0xff000000",
+                        "--add", "item", "apple.prefs", "popup.apple", "--add", "item", "apple.lock", "popup.apple",
+                        "--add", "item", "a", "left", "--add", "item", "b", "left",
+                        "--add", "bracket", "group", "a", "/^b$/", "--set", "group", "background.color=0x40ffffff"])
+        let apple = model.item(named: "apple")!
+        XCTAssertTrue(apple.props.popup.drawing)
+        XCTAssertEqual(apple.props.popup.align, "center")
+        XCTAssertTrue(apple.props.popup.background.drawing)
+        XCTAssertEqual(model.popupItems(of: "apple").map(\.name), ["apple.prefs", "apple.lock"])
+        XCTAssertEqual(model.members(of: model.item(named: "group")!), ["a", "b"])
+        _ = run(model, ["--rename", "apple", "logo"])
+        XCTAssertEqual(model.popupItems(of: "logo").map(\.name), ["apple.prefs", "apple.lock"]) // popups follow
+        XCTAssertNotNil(run(model, ["--set", "logo", "popup.align=top"]).errors.first)
+    }
+
+    func testGraph() {
+        let model = BarModel()
+        _ = run(model, ["--add", "graph", "cpu", "right", "3", "--set", "cpu", "graph.color=0xff00ff00"])
+        XCTAssertEqual(model.item(named: "cpu")?.props.graph.width, 3)
+        XCTAssertNil(model.item(named: "cpu")?.props.width) // the graph is the middle part, the item stays dynamic
+        _ = run(model, ["--push", "cpu", "0.1", "0.2", "2", "-1"])
+        XCTAssertEqual(model.item(named: "cpu")?.graphValues, [0.2, 1, 0]) // clamped, the newest 3 kept
+        XCTAssertEqual(model.item(named: "cpu")?.props.graph.fill, ARGB(0x5500_FF00)) // no fill_color: the color, lighter
+        XCTAssertFalse(run(model, ["--push", "cpu", "x"]).errors.isEmpty)
+        _ = run(model, ["--add", "item", "plain", "left"])
+        XCTAssertFalse(run(model, ["--push", "plain", "0.5"]).errors.isEmpty)
+    }
+
+    func testSlider() {
+        let model = BarModel()
+        _ = run(model, ["--add", "slider", "volume", "right", "100", "--set", "volume", "script=vol", "slider.knob=o", "slider.knob.color=0xffff0000",
+                        "slider.percentage=150", "--subscribe", "volume", "mouse.clicked"])
+        let slider = model.item(named: "volume")!.props.slider
+        XCTAssertEqual(slider.width, 100)
+        XCTAssertEqual(slider.percentage, 100)
+        XCTAssertEqual(slider.knob.string, "o")
+        XCTAssertEqual(slider.knob.color.value, 0xFFFF_0000)
+        let runs = model.slide("volume", to: 42.4, button: "left", modifier: "none")
+        XCTAssertEqual(model.item(named: "volume")?.props.slider.percentage, 42)
+        XCTAssertEqual(runs.map(\.env["PERCENTAGE"]), ["42"])
+        XCTAssertEqual(runs.first?.env["SENDER"], "mouse.clicked")
+    }
+
+    func testSpaces() {
+        let model = BarModel()
+        _ = run(model, ["--add", "space", "space.1", "left", "--set", "space.1", "space=1", "script=s",
+                        "--add", "space", "space.2", "left", "--set", "space.2", "space=2", "script=s",
+                        "--add", "item", "watcher", "right", "--set", "watcher", "script=w", "--subscribe", "watcher", "space_change"])
+        model.currentSpaces = [1: 2]
+        let runs = model.spaceChange()
+        XCTAssertEqual(runs.map(\.item), ["space.1", "space.2", "watcher"])
+        XCTAssertEqual(runs.map { $0.env["SELECTED"] }, ["false", "true", nil])
+        XCTAssertEqual(runs[1].env["SID"], "2")
+        XCTAssertEqual(runs[1].env["DID"], "1")
+        XCTAssertEqual(runs[2].env["INFO"], "{\"display-1\":2}")
+        var props = ItemProps()
+        XCTAssertNil(props.apply("space", "1,3"))
+        XCTAssertTrue(props.isShown(onSpaces: [3]))
+        XCTAssertFalse(props.isShown(onSpaces: [2]))
+        XCTAssertTrue(props.isShown(onSpaces: [])) // not known: shown
+    }
+
+    func testScrolledText() {
+        var text = TextProps()
+        text.string = "abcdef"
+        text.maxChars = 4
+        XCTAssertTrue(text.scrolls)
+        XCTAssertEqual(text.shown, "abcd")
+        XCTAssertEqual(text.scrolled(0), "abcd")
+        XCTAssertEqual(text.scrolled(4), "ef  ")
+        XCTAssertEqual(text.scrolled(8), " abc")
+        XCTAssertEqual(text.scrolled(9), "abcd") // 6 letters and 3 spaces: back after 9
+    }
+}
+
+final class LayoutPartsTests: XCTestCase {
+    func testMiddleAndImages() {
+        var props = ItemProps()
+        props.icon.paddingRight = 2
+        props.label.paddingLeft = 3
+        XCTAssertEqual(Layout.length(of: props, middle: 50, measure: { _ in 10 }), 10 + 2 + 50 + 3 + 10)
+        _ = props.apply("label.background.image", "artwork.png")
+        XCTAssertEqual(Layout.length(of: props, measure: { _ in 10 }, image: { _ in 40 }), 10 + 2 + 3 + 40)
+        _ = props.apply("background.image", "big.png")
+        // the item's own image is wider than icon and label (12 + 3 + 40): it sets the length
+        XCTAssertEqual(Layout.length(of: props, measure: { _ in 10 }, image: { $0.string == "big.png" ? 100 : 40 }), 100)
+    }
+
+    func testPopup() {
+        let slots = [Layout.Slot(name: "a", position: "popup", length: 50, paddingLeft: 2, paddingRight: 3),
+                     Layout.Slot(name: "b", position: "popup", length: 80, paddingLeft: 0, paddingRight: 0)]
+        let vertical = Layout.popup(slots, horizontal: false, rowHeight: 20, inset: 1)
+        XCTAssertEqual(vertical.places["a"]?.x, 3)
+        XCTAssertEqual(vertical.places["a"]?.y, 1)
+        XCTAssertEqual(vertical.places["b"]?.y, 21)
+        XCTAssertEqual(vertical.width, 82) // the widest, 80, and the inset each side
+        XCTAssertEqual(vertical.height, 42)
+        let horizontal = Layout.popup(slots, horizontal: true, rowHeight: 20, inset: 0)
+        XCTAssertEqual(horizontal.places["b"]?.x, 55)
+        XCTAssertEqual(horizontal.width, 135)
+        XCTAssertEqual(horizontal.height, 20)
+        XCTAssertEqual(Layout.popupX(align: "center", itemX: 100, itemLength: 20, width: 60), 80)
+        XCTAssertEqual(Layout.popupX(align: "right", itemX: 100, itemLength: 20, width: 60), 60)
+    }
+}
+
+final class AnimationTests: XCTestCase {
+    func testCurves() {
+        for curve in Curve.allCases {
+            XCTAssertEqual(curve.value(0), 0, accuracy: 1e-9, "\(curve)")
+            XCTAssertEqual(curve.value(1), 1, accuracy: 1e-9, "\(curve)")
+            XCTAssertGreaterThan(curve.value(0.5), 0, "\(curve)")
+            XCTAssertLessThan(curve.value(0.5), 1, "\(curve)")
+        }
+        XCTAssertEqual(ARGB.mix(ARGB(0xFF00_0000), ARGB(0x00FF_FFFF), 0.5).value, 0x8080_8080)
+    }
+
+    func testAnimatedSet() {
+        let model = BarModel()
+        var now = 100.0
+        model.clock = { now }
+        _ = run(model, ["--add", "item", "a", "left", "--set", "a", "y_offset=0", "label.color=0xff000000"])
+        let outcome = run(model, ["--animate", "linear", "30", "--set", "a", "y_offset=10", "label.color=0xffffffff", "label=new"])
+        XCTAssertTrue(outcome.animating)
+        let a = { model.displayed(model.item(named: "a")!) }
+        XCTAssertEqual(model.item(named: "a")?.props.yOffset, 10) // the model holds the target
+        XCTAssertEqual(a().yOffset, 0)
+        XCTAssertEqual(a().label.string, "new") // not a number: at once
+        now += 0.25 // 15 of 30 frames
+        XCTAssertEqual(a().yOffset, 5, accuracy: 1e-9)
+        XCTAssertEqual(a().label.color.value, 0xFF80_8080)
+        // a new animation starts from where the item is
+        _ = run(model, ["--animate", "linear", "60", "--set", "a", "y_offset=0"])
+        XCTAssertEqual(a().yOffset, 5, accuracy: 1e-9)
+        now += 0.5
+        XCTAssertEqual(a().yOffset, 2.5, accuracy: 1e-9)
+        now += 0.5
+        model.endFinishedAnimations()
+        XCTAssertFalse(model.isAnimating)
+        XCTAssertEqual(a().yOffset, 0)
+        // without --animate, at once; --animate lasts for its message only
+        _ = run(model, ["--set", "a", "y_offset=7"])
+        XCTAssertEqual(a().yOffset, 7)
+        XCTAssertFalse(model.isAnimating)
+        XCTAssertFalse(run(model, ["--animate", "bounce", "10"]).errors.isEmpty)
+    }
+
+    func testAnimatedBar() {
+        let model = BarModel()
+        var now = 0.0
+        model.clock = { now }
+        _ = run(model, ["--animate", "sin", "60", "--bar", "height=40"])
+        XCTAssertTrue(model.isBarAnimating)
+        XCTAssertEqual(model.displayedBar.height, 25)
+        now = 1
+        XCTAssertEqual(model.displayedBar.height, 40)
+        model.endFinishedAnimations()
+        XCTAssertFalse(model.isAnimating)
     }
 }

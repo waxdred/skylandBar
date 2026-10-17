@@ -7,6 +7,8 @@ import SkylandBarCore
 final class ScriptRunner {
     var configDir: String
     let shimDir: String
+    /// the scripts still running, stopped when the bar quits
+    private var running = Set<Process>()
 
     init(configDir: String) {
         self.configDir = configDir
@@ -57,13 +59,24 @@ final class ScriptRunner {
         process.currentDirectoryURL = URL(fileURLWithPath: configDir)
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
-        if let onExit { process.terminationHandler = { _ in DispatchQueue.main.async(execute: onExit) } }
+        process.terminationHandler = { [weak self] process in
+            DispatchQueue.main.async {
+                self?.running.remove(process)
+                onExit?()
+            }
+        }
         do {
             try process.run()
+            running.insert(process)
             return true
         } catch {
             FileHandle.standardError.write(Data("skylandbar: cannot run \(command.joined(separator: " ")): \(error)\n".utf8))
             return false
         }
+    }
+
+    func terminateAll() {
+        for process in running where process.isRunning { process.terminate() }
+        running = []
     }
 }

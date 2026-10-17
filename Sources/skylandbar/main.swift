@@ -7,7 +7,7 @@ import SkylandBarCore
 //   skylandbar --config <rc>   start the bar with that config
 //   skylandbar --bar ... --add item ... --set ...   talk to the running bar, like sketchybar
 
-let version = "0.1.0"
+let version = "0.2.0"
 let usage = """
     usage: skylandbar [--config <file>]       start the bar
            skylandbar <commands>              send commands to the running bar:
@@ -16,7 +16,8 @@ let usage = """
              --subscribe <name> <event>...    --trigger <event> [VAR=value...]
              --remove <name|/regex/>          --move <name> before|after <reference>
              --reorder <name>...              --rename <name> <new>   --clone <name> <parent>
-             --query bar|defaults|events|displays|<name>
+             --push <graph> <value>...        --animate linear|quadratic|tanh|sin|exp|circ <frames>
+             --query bar|defaults|events|displays|default_menu_items|<name>
              --update   --reload [<file>]   --hotload on|off   --exit
     Configs and plugins written for sketchybar work as they are: scripts find this bar as
     `sketchybar` on their PATH.

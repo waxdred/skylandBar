@@ -7,8 +7,10 @@ public struct BarItem: Equatable {
     public var props: ItemProps
     /// the events its script gets, in subscription order
     public var subscriptions: [String] = []
-    /// bracket members, graph width... as given to --add
+    /// bracket members (names or /regex/), as given to --add
     public var args: [String] = []
+    /// a graph's values (0...1) given with --push, the newest last
+    public var graphValues: [Double] = []
 }
 
 /// A script to run: the item's `script` (or `click_script`) with NAME, SENDER, INFO...
@@ -28,6 +30,8 @@ public struct Outcome: Equatable {
     /// bar windows: frame, level, displays
     public var barChanged = false
     public var timersChanged = false
+    /// an --animate started: draw frames until `BarModel.isAnimating` is false
+    public var animating = false
     /// custom events (their distributed notifications)
     public var eventsChanged = false
     public var reload = false
@@ -55,6 +59,17 @@ public final class BarModel {
     public var frames: [String: [String: Box]] = [:]
     /// filled by the app before a query
     public var displays: [[String: Any]] = []
+    /// filled by the app before a query: the menu bar items an alias can copy ("Owner,Name")
+    public var menuItems: [String] = []
+    /// set by the app: the Mission Control space shown on each display (1-based both)
+    public var currentSpaces: [Int: Int] = [:]
+    /// seconds, for animations; tests set their own
+    public var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
+
+    /// --animate of the message being run
+    private var animation: (curve: Curve, frames: Double)?
+    private var itemTransitions: [String: Transition<ItemProps>] = [:]
+    private var barTransition: Transition<BarProps>?
 
     public init() {}
 
@@ -65,6 +80,8 @@ public final class BarModel {
         defaults = ItemProps()
         events = [:]
         frames = [:]
+        itemTransitions = [:]
+        barTransition = nil
     }
 
     public func item(named name: String) -> BarItem? { items.first { $0.name == name } }
@@ -83,13 +100,50 @@ public final class BarModel {
 
     public func execute(_ commands: [Command]) -> Outcome {
         var outcome = Outcome()
+        animation = nil
         for command in commands { execute(command, &outcome) }
+        animation = nil
         return outcome
+    }
+
+    // MARK: animations
+
+    public var isAnimating: Bool { !itemTransitions.isEmpty || barTransition != nil }
+    public var isBarAnimating: Bool { barTransition != nil }
+
+    /// The item as drawn now: on its way to its properties while it is animated.
+    public func displayed(_ item: BarItem) -> ItemProps {
+        guard let transition = itemTransitions[item.name] else { return item.props }
+        return .blend(transition.from, item.props, transition.progress(at: clock()))
+    }
+
+    /// The bar as drawn now.
+    public var displayedBar: BarProps {
+        guard let transition = barTransition else { return bar }
+        return .blend(transition.from, bar, transition.progress(at: clock()))
+    }
+
+    /// Forgets the animations that are over; call it after drawing a frame.
+    public func endFinishedAnimations() {
+        let now = clock()
+        itemTransitions = itemTransitions.filter { !$0.value.isDone(at: now) }
+        if barTransition?.isDone(at: now) == true { barTransition = nil }
+    }
+
+    private func transition<Props>(from: Props, _ animation: (curve: Curve, frames: Double)) -> Transition<Props> {
+        Transition(from: from, start: clock(), duration: animation.frames / framesPerSecond, curve: animation.curve)
     }
 
     private func execute(_ command: Command, _ o: inout Outcome) {
         switch command {
             case .bar(let props):
+                let before = displayedBar
+                defer {
+                    if let animation, bar != before {
+                        barTransition = transition(from: before, animation)
+                        o.animating = true
+                    }
+                }
                 for prop in props {
                     if let error = bar.apply(prop.key, prop.value) { o.errors.append("[!] Bar: \(prop.key)=\(prop.value): \(error)") }
                 }
@@ -101,11 +155,18 @@ public final class BarModel {
                 let matches = indices(matching: target)
                 if matches.isEmpty { return o.errors.append("[!] Set: no item '\(target)'") }
                 for index in matches {
+                    let before = displayed(items[index])
+                    defer {
+                        if let animation, items[index].props != before {
+                            itemTransitions[items[index].name] = transition(from: before, animation)
+                            o.animating = true
+                        }
+                    }
                     for prop in props {
                         if let error = items[index].props.apply(prop.key, prop.value) {
                             o.errors.append("[!] Set \(items[index].name): \(prop.key)=\(prop.value): \(error)")
                         }
-                        if ["update_freq", "updates", "script"].contains(prop.key) { o.timersChanged = true }
+                        if ["update_freq", "updates", "script", "alias.update_freq"].contains(prop.key) { o.timersChanged = true }
                     }
                 }
                 o.redraw = true
@@ -130,6 +191,7 @@ public final class BarModel {
             case .remove(let target):
                 let matches = Set(indices(matching: target))
                 if matches.isEmpty { return o.errors.append("[!] Remove: no item '\(target)'") }
+                for index in matches { itemTransitions[items[index].name] = nil }
                 items = items.enumerated().filter { !matches.contains($0.offset) }.map(\.element)
                 o.redraw = true
                 o.timersChanged = true
@@ -152,7 +214,12 @@ public final class BarModel {
                 guard let index = items.firstIndex(where: { $0.name == from }) else { return o.errors.append("[!] Rename: no item '\(from)'") }
                 guard item(named: to) == nil else { return o.errors.append("[!] Rename: '\(to)' already exists") }
                 items[index].name = to
+                itemTransitions[to] = itemTransitions.removeValue(forKey: from)
+                for popup in items.indices where items[popup].props.position == "popup.\(from)" {
+                    items[popup].props.position = "popup.\(to)"
+                }
                 o.timersChanged = true
+                o.redraw = true
             case .clone(let name, let parent, let placement):
                 guard let index = items.firstIndex(where: { $0.name == parent }) else { return o.errors.append("[!] Clone: no item '\(parent)'") }
                 guard item(named: name) == nil else { return o.errors.append("[!] Clone: '\(name)' already exists") }
@@ -162,11 +229,23 @@ public final class BarModel {
                 o.redraw = true
                 o.timersChanged = true
             case .push(let name, let values):
-                // graphs are drawn from milestone 2: their values are kept
                 guard let index = items.firstIndex(where: { $0.name == name }) else { return o.errors.append("[!] Push: no item '\(name)'") }
-                items[index].args += values
-            case .animate:
-                break // milestone 2: the following changes apply at once
+                guard items[index].kind == "graph" else { return o.errors.append("[!] Push: '\(name)' is not a graph") }
+                for value in values {
+                    guard let number = Double(value), number.isFinite else {
+                        o.errors.append("[!] Push \(name): '\(value)' is not a number")
+                        continue
+                    }
+                    items[index].graphValues.append(min(1, max(0, number)))
+                }
+                let keep = max(1, Int(items[index].props.graph.width.rounded()))
+                if items[index].graphValues.count > keep { items[index].graphValues.removeFirst(items[index].graphValues.count - keep) }
+                o.redraw = true
+            case .animate(let name, let frames):
+                guard let curve = Curve(rawValue: name) else {
+                    return o.errors.append("[!] Animate: '\(name)' is not one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))")
+                }
+                animation = (curve, frames)
             case .query(let what):
                 query(what, &o)
             case .update:
@@ -197,12 +276,55 @@ public final class BarModel {
                     return o.errors.append("[!] Add \(kind): '\(position)' is not one of \(itemPositions.joined(separator: ", ")) or popup.<item>")
                 }
                 props.position = position
-                if kind == "graph" || kind == "slider", let width = Double(args[1]) { props.width = width }
+                if kind == "graph", let width = Double(args[1]) { props.graph.width = width }
+                if kind == "slider", let width = Double(args[1]) { props.slider.width = width }
             default: // bracket: drawn from milestone 2
                 props.position = "bracket"
         }
         items.append(BarItem(name: name, kind: kind, props: props, args: kind == "bracket" ? args : []))
         o.redraw = true
+        if kind == "alias" { o.timersChanged = true }
+    }
+
+    // MARK: popups, brackets, sliders, spaces
+
+    /// The items in `parent`'s popup, in order.
+    public func popupItems(of parent: String) -> [BarItem] {
+        items.filter { $0.props.position == "popup.\(parent)" }
+    }
+
+    /// A bracket's members (its names and /regex/ resolved), in bar order.
+    public func members(of bracket: BarItem) -> [String] {
+        let wanted = Set(bracket.args.flatMap { indices(matching: $0) })
+        return items.indices.filter { wanted.contains($0) && items[$0].kind != "bracket" }.map { items[$0].name }
+    }
+
+    /// A slider moved by the mouse: its percentage, then mouse.clicked with PERCENTAGE.
+    public func slide(_ name: String, to percentage: Double, button: String, modifier: String) -> [ScriptRun] {
+        guard let index = items.firstIndex(where: { $0.name == name }) else { return [] }
+        let percent = min(100, max(0, percentage)).rounded()
+        items[index].props.slider.percentage = percent
+        return click(name, button: button, modifier: modifier, env: ["PERCENTAGE": String(Int(percent))])
+    }
+
+    /// space_change: the subscribed items and every `space` item, which gets SELECTED
+    /// (true when its space is shown), SID (its space) and DID (the display showing it);
+    /// INFO is {"display-N": space} from `currentSpaces`.
+    public func spaceChange() -> [ScriptRun] {
+        let info = "{" + currentSpaces.sorted { $0.key < $1.key }.map { "\"display-\($0.key)\":\($0.value)" }.joined(separator: ",") + "}"
+        return items.compactMap { item in
+            guard !item.props.script.isEmpty, item.props.updates != "off",
+                  item.kind == "space" || item.subscriptions.contains("space_change") else { return nil }
+            var env = ["NAME": item.name, "SENDER": "space_change", "INFO": info]
+            if item.kind == "space" {
+                let spaces = item.props.space.split(separator: ",").compactMap { Int($0) }
+                let shown = currentSpaces.first { spaces.contains($0.value) }
+                env["SELECTED"] = shown == nil ? "false" : "true"
+                if let sid = spaces.first { env["SID"] = String(sid) }
+                if let shown { env["DID"] = String(shown.key) } else if let did = Int(item.props.display) { env["DID"] = String(did) }
+            }
+            return ScriptRun(item: item.name, script: item.props.script, env: env)
+        }
     }
 
     /// The scripts an event runs: `forced` runs every item's script, `routine` the item's
@@ -221,9 +343,9 @@ public final class BarModel {
     }
 
     /// A click: the item's click_script, and its script when it is subscribed to mouse.clicked.
-    public func click(_ name: String, button: String, modifier: String) -> [ScriptRun] {
+    public func click(_ name: String, button: String, modifier: String, env extra: [String: String] = [:]) -> [ScriptRun] {
         guard let item = item(named: name) else { return [] }
-        let env = ["BUTTON": button, "MODIFIER": modifier]
+        let env = extra.merging(["BUTTON": button, "MODIFIER": modifier]) { _, b in b }
         var runs: [ScriptRun] = []
         if !item.props.clickScript.isEmpty {
             runs.append(ScriptRun(item: name, script: item.props.clickScript,
@@ -252,9 +374,11 @@ public final class BarModel {
                 json = all
             case "displays":
                 json = displays
+            case "default_menu_items":
+                json = menuItems
             default:
                 guard let item = item(named: what) else {
-                    return o.errors.append("[!] Query: '\(what)' is not bar, defaults, events, displays or an item")
+                    return o.errors.append("[!] Query: '\(what)' is not bar, defaults, events, displays, default_menu_items or an item")
                 }
                 json = itemJSON(item)
         }
@@ -268,11 +392,12 @@ public final class BarModel {
         for (display, box) in frames[item.name] ?? [:] {
             rects[display] = ["origin": [box.x, box.y], "size": [box.width, box.height]]
         }
-        return [
+        var json: [String: Any] = [
             "name": item.name, "type": item.kind,
             "geometry": item.props.json,
             "icon": item.props.icon.json,
             "label": item.props.label.json,
+            "popup": item.props.popup.json.merging(["items": popupItems(of: item.name).map(\.name)]) { a, _ in a },
             "scripting": [
                 "script": item.props.script, "click_script": item.props.clickScript,
                 "update_freq": item.props.updateFreq, "updates": item.props.updates,
@@ -280,5 +405,13 @@ public final class BarModel {
             ] as [String: Any],
             "bounding_rects": rects,
         ]
+        switch item.kind {
+            case "bracket": json["bracket"] = members(of: item)
+            case "graph": json["graph"] = item.props.graph.json.merging(["values": item.graphValues]) { a, _ in a }
+            case "slider": json["slider"] = item.props.slider.json
+            case "alias": json["alias"] = item.props.alias.json
+            default: break
+        }
+        return json
     }
 }

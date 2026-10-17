@@ -1,8 +1,9 @@
 import AppKit
 import SkylandBarCore
 
-// The bar windows and how items are drawn: background, icon, label, each with sketchybar's
-// paddings, offsets, fonts, colors, borders and shadows.
+// The bar and popup windows and how items are drawn: background, icon, graph / slider /
+// alias, label, each with sketchybar's paddings, offsets, fonts, colors, borders, shadows
+// and images; Liquid Glass behind the backgrounds that ask for it.
 
 enum Fonts {
     private static var cache: [FontSpec: NSFont] = [:]
@@ -65,6 +66,8 @@ enum Fonts {
     }
 
     static func attributes(_ text: TextProps) -> [NSAttributedString.Key: Any] {
+        // the cache is by font spec, an animated size makes one font per frame: keep it small
+        if cache.count > 256 { cache.removeAll() }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font(text.font),
             .foregroundColor: color(text.highlight ? text.highlightColor : text.color),
@@ -80,16 +83,72 @@ enum Fonts {
     }
 }
 
-/// One item as laid out on one bar.
+/// One item as laid out on one bar or popup.
 struct PlacedItem {
     var name: String
+    var kind: String
+    /// where its content starts (after `background.padding_left`)
     var x: Double
     var length: Double
+    /// its row: the whole bar, or a popup row
+    var top: Double
+    var height: Double
     var props: ItemProps
+    /// a graph's, a slider's or an alias's width, between the icon and the label
+    var middle = 0.0
+    var graphValues: [Double] = []
+    var alias: NSImage? = nil
+
+    var rect: NSRect { NSRect(x: x, y: top, width: length, height: height) }
+
+    /// x of each part: icon, middle, label (with their paddings), and the texts' content widths
+    var parts: (icon: Double, iconWidth: Double, middle: Double, label: Double, labelWidth: Double) {
+        let measure: (TextProps) -> Double = Fonts.width, image: (ImageProps) -> Double = Images.width
+        var cursor = x
+        let icon = cursor, iconWidth = Layout.contentWidth(props.icon, measure: measure, image: image)
+        if props.icon.drawing { cursor += props.icon.paddingLeft + iconWidth + props.icon.paddingRight }
+        let middleX = cursor
+        cursor += middle
+        let labelWidth = Layout.contentWidth(props.label, measure: measure, image: image)
+        return (icon, iconWidth, middleX, cursor, labelWidth)
+    }
+}
+
+/// How a window's own background looks: the bar's, or a popup's.
+struct PanelStyle {
+    var color = ARGB.clear
+    var borderColor = ARGB.clear
+    var borderWidth = 0.0
+    var cornerRadius = 0.0
+    var glass = "off"
+    var fontSmoothing = false
+
+    init() {}
+
+    init(bar: BarProps) {
+        color = bar.color
+        borderColor = bar.borderColor
+        borderWidth = bar.borderWidth
+        cornerRadius = bar.cornerRadius
+        glass = bar.glass
+        fontSmoothing = bar.fontSmoothing
+    }
+
+    init(popup: PopupProps, fontSmoothing: Bool) {
+        let background = popup.background
+        if background.drawing {
+            color = background.color
+            borderColor = background.borderColor
+            borderWidth = background.borderWidth
+            glass = background.glass
+        }
+        cornerRadius = background.cornerRadius
+        self.fontSmoothing = fontSmoothing
+    }
 }
 
 final class BarView: NSView {
-    var bar = BarProps()
+    var style = PanelStyle()
     var items: [PlacedItem] = []
 
     var onItemEntered: ((String) -> Void)?
@@ -98,79 +157,191 @@ final class BarView: NSView {
     var onBarExited: (() -> Void)?
     var onClick: ((_ item: String, _ button: String, _ modifier: String) -> Void)?
     var onScroll: ((_ item: String?, _ delta: Double, _ modifier: String) -> Void)?
+    /// a slider moved by the mouse: its percentage; `done` on mouse up
+    var onSlide: ((_ item: String, _ percentage: Double, _ modifier: String, _ done: Bool) -> Void)?
     private var hovered: String?
+    private var sliding: String?
 
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Whether a text scrolls (`scroll_texts`), so the bar redraws it on a timer.
+    var scrolls: Bool {
+        items.contains { $0.props.scrollTexts && ($0.props.icon.scrolls || $0.props.label.scrolls) }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        NSGraphicsContext.current?.cgContext.setShouldSmoothFonts(bar.fontSmoothing)
-        let inset = bar.borderWidth / 2
+        NSGraphicsContext.current?.cgContext.setShouldSmoothFonts(style.fontSmoothing)
+        let inset = style.borderWidth / 2
         let rect = bounds.insetBy(dx: inset, dy: inset)
-        let radius = min(bar.cornerRadius, rect.height / 2, rect.width / 2)
+        let radius = min(style.cornerRadius, rect.height / 2, rect.width / 2)
         let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        Fonts.color(bar.color).setFill()
-        path.fill()
-        if bar.borderWidth > 0 {
-            Fonts.color(bar.borderColor).setStroke()
-            path.lineWidth = bar.borderWidth
+        if style.glass == "off" {
+            Fonts.color(style.color).setFill()
+            path.fill()
+        }
+        if style.borderWidth > 0 {
+            Fonts.color(style.borderColor).setStroke()
+            path.lineWidth = style.borderWidth
             path.stroke()
         }
         for item in items { draw(item) }
     }
 
+    private func center(_ item: PlacedItem) -> Double { item.top + item.height / 2 - item.props.yOffset } // y_offset up
+
     private func draw(_ item: PlacedItem) {
         let props = item.props
-        let mid = bounds.height / 2 - props.yOffset // y_offset up
-        if props.background.drawing { fill(props.background, x: item.x, width: item.length, mid: mid) }
-        var cursor = item.x
-        for text in [props.icon, props.label] where text.drawing {
-            let measured = Fonts.width(text)
-            let width = text.width ?? measured
-            if text.background.drawing {
-                fill(text.background, x: cursor, width: text.paddingLeft + width + text.paddingRight, mid: mid)
-            }
-            cursor += text.paddingLeft
-            if !text.shown.isEmpty {
-                let font = Fonts.font(text.font)
-                let height = font.ascender - font.descender
-                var x = cursor
-                if text.width != nil {
-                    switch text.align {
-                        case "center": x += (width - measured) / 2
-                        case "right": x += width - measured
-                        default: break
-                    }
+        let mid = center(item)
+        if props.background.drawing { fill(props.background, x: item.x, width: item.length, mid: mid, row: item.height) }
+        if item.kind == "bracket" { return }
+        let parts = item.parts
+        if props.icon.drawing { draw(props.icon, scroll: props.scrollTexts, x: parts.icon, width: parts.iconWidth, mid: mid, row: item.height) }
+        switch item.kind {
+            case "graph": drawGraph(item, x: parts.middle, mid: mid)
+            case "slider": drawSlider(item, x: parts.middle, mid: mid)
+            case "alias":
+                if let image = item.alias {
+                    let size = NSSize(width: image.size.width * props.alias.scale, height: image.size.height * props.alias.scale)
+                    Images.draw(image, in: NSRect(x: parts.middle, y: mid - size.height / 2, width: size.width, height: size.height),
+                                tint: props.alias.color)
                 }
-                NSGraphicsContext.saveGraphicsState()
-                if text.width != nil { NSRect(x: cursor, y: 0, width: width, height: bounds.height).clip() }
-                NSAttributedString(string: text.shown, attributes: Fonts.attributes(text))
-                    .draw(at: NSPoint(x: x, y: mid - height / 2 - text.yOffset))
-                NSGraphicsContext.restoreGraphicsState()
-            }
-            cursor += width + text.paddingRight
+            default: break
         }
+        if props.label.drawing { draw(props.label, scroll: props.scrollTexts, x: parts.label, width: parts.labelWidth, mid: mid, row: item.height) }
     }
 
-    /// A background `width` wide from `x`, centered on `mid` (0 height: the bar's).
-    private func fill(_ background: BackgroundProps, x: Double, width: Double, mid: Double) {
-        let height = background.height > 0 ? background.height : bounds.height
+    /// A text from `x` (its padding_left included), its content `width` wide.
+    private func draw(_ text: TextProps, scroll: Bool, x: Double, width: Double, mid: Double, row: Double) {
+        if text.background.drawing {
+            fill(text.background, x: x, width: text.paddingLeft + width + text.paddingRight, mid: mid, row: row)
+        }
+        let start = x + text.paddingLeft
+        let string = scroll && text.scrolls ? text.scrolled(Int(CACurrentMediaTime() / max(0.01, text.scrollDuration / 400))) : text.shown
+        guard !string.isEmpty else { return }
+        let font = Fonts.font(text.font)
+        let measured = ceil(NSAttributedString(string: string, attributes: [.font: font]).size().width)
+        var textX = start
+        switch text.align {
+            case "center": textX += (width - measured) / 2
+            case "right": textX += width - measured
+            default: break
+        }
+        NSGraphicsContext.saveGraphicsState()
+        if text.width != nil || scroll { NSRect(x: start, y: 0, width: width, height: bounds.height).clip() }
+        NSAttributedString(string: string, attributes: Fonts.attributes(text))
+            .draw(at: NSPoint(x: textX, y: mid - (font.ascender - font.descender) / 2 - text.yOffset))
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// Where a background `width` wide from `x` goes, centered on `mid` (0 height: the row's).
+    private func backgroundRect(_ background: BackgroundProps, x: Double, width: Double, mid: Double, row: Double) -> NSRect {
+        let height = background.height > 0 ? background.height : row
         let inset = background.borderWidth / 2
-        let rect = NSRect(x: x + background.xOffset, y: mid - height / 2 - background.yOffset, width: width, height: height)
+        return NSRect(x: x + background.xOffset, y: mid - height / 2 - background.yOffset, width: width, height: height)
             .insetBy(dx: inset, dy: inset)
+    }
+
+    private func fill(_ background: BackgroundProps, x: Double, width: Double, mid: Double, row: Double) {
+        let rect = backgroundRect(background, x: x, width: width, mid: mid, row: row)
         guard rect.width > 0, rect.height > 0 else { return }
         let radius = min(background.cornerRadius, rect.height / 2, rect.width / 2)
         let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        NSGraphicsContext.saveGraphicsState()
-        if background.shadow.drawing { Fonts.shadow(background.shadow).set() }
-        Fonts.color(background.color).setFill()
-        path.fill()
-        NSGraphicsContext.restoreGraphicsState()
+        if background.glass == "off" {
+            NSGraphicsContext.saveGraphicsState()
+            if background.shadow.drawing { Fonts.shadow(background.shadow).set() }
+            Fonts.color(background.color).setFill()
+            path.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        let image = background.image
+        if image.isShown, let picture = Images.image(image.string) {
+            let size = Images.size(image)
+            let frame = NSRect(x: rect.minX + image.paddingLeft, y: rect.midY - size.height / 2 - image.yOffset,
+                               width: size.width, height: size.height)
+            NSGraphicsContext.saveGraphicsState()
+            if image.shadow.drawing { Fonts.shadow(image.shadow).set() }
+            Images.draw(picture, in: frame, cornerRadius: image.cornerRadius, borderWidth: image.borderWidth, borderColor: image.borderColor)
+            NSGraphicsContext.restoreGraphicsState()
+        }
         if background.borderWidth > 0 {
             Fonts.color(background.borderColor).setStroke()
             path.lineWidth = background.borderWidth
             path.stroke()
         }
+    }
+
+    /// The backgrounds drawn as Liquid Glass, for the window to put glass views under them.
+    func glassBackgrounds() -> [(rect: NSRect, background: BackgroundProps)] {
+        var result: [(rect: NSRect, background: BackgroundProps)] = []
+        for item in items {
+            let props = item.props, mid = center(item)
+            func add(_ background: BackgroundProps, _ x: Double, _ width: Double) {
+                guard background.drawing, background.glass != "off" else { return }
+                result.append((backgroundRect(background, x: x, width: width, mid: mid, row: item.height), background))
+            }
+            add(props.background, item.x, item.length)
+            if item.kind == "bracket" { continue }
+            let parts = item.parts
+            if props.icon.drawing { add(props.icon.background, parts.icon, props.icon.paddingLeft + parts.iconWidth + props.icon.paddingRight) }
+            if item.kind == "slider" { add(props.slider.background, parts.middle, props.slider.width) }
+            if props.label.drawing { add(props.label.background, parts.label, props.label.paddingLeft + parts.labelWidth + props.label.paddingRight) }
+        }
+        return result
+    }
+
+    // MARK: graphs and sliders
+
+    /// The values right-aligned, one point each, from the bottom of the background's height.
+    private func drawGraph(_ item: PlacedItem, x: Double, mid: Double) {
+        let graph = item.props.graph, values = item.graphValues
+        guard graph.width > 0, !values.isEmpty else { return }
+        let height = item.props.background.height > 0 ? item.props.background.height : item.height
+        let bottom = mid + height / 2
+        let first = x + graph.width - Double(values.count - 1)
+        let points = values.enumerated().map { NSPoint(x: first + Double($0.offset), y: bottom - $0.element * height) }
+        let line = NSBezierPath()
+        line.move(to: points[0])
+        for point in points.dropFirst() { line.line(to: point) }
+        let area = line.copy() as! NSBezierPath
+        area.line(to: NSPoint(x: points[points.count - 1].x, y: bottom))
+        area.line(to: NSPoint(x: points[0].x, y: bottom))
+        area.close()
+        Fonts.color(graph.fill).setFill()
+        area.fill()
+        Fonts.color(graph.color).setStroke()
+        line.lineWidth = graph.lineWidth
+        line.stroke()
+    }
+
+    private func drawSlider(_ item: PlacedItem, x: Double, mid: Double) {
+        let slider = item.props.slider
+        guard slider.width > 0 else { return }
+        let track = slider.background
+        if track.drawing { fill(track, x: x, width: slider.width, mid: mid, row: item.height) }
+        let rect = backgroundRect(track, x: x, width: slider.width, mid: mid, row: item.height)
+        let filled = NSRect(x: rect.minX, y: rect.minY, width: rect.width * slider.percentage / 100, height: rect.height)
+        if filled.width > 0 {
+            let radius = min(track.cornerRadius, filled.height / 2, filled.width / 2)
+            Fonts.color(slider.highlightColor).setFill()
+            NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius).fill()
+        }
+        let knob = slider.knob
+        if knob.drawing, !knob.string.isEmpty {
+            let font = Fonts.font(knob.font)
+            let size = NSAttributedString(string: knob.string, attributes: [.font: font]).size()
+            NSAttributedString(string: knob.string, attributes: Fonts.attributes(knob))
+                .draw(at: NSPoint(x: rect.minX + rect.width * slider.percentage / 100 - size.width / 2,
+                                  y: mid - (font.ascender - font.descender) / 2 - knob.yOffset))
+        }
+    }
+
+    /// The slider under `point`, and the percentage there.
+    private func slider(at point: NSPoint) -> (name: String, percentage: Double)? {
+        guard let item = items.last(where: { $0.kind == "slider" && $0.rect.contains(point) }) else { return nil }
+        let x = item.parts.middle, width = item.props.slider.width
+        guard width > 0, Double(point.x) >= x - 4, Double(point.x) <= x + width + 4 else { return nil }
+        return (item.name, (Double(point.x) - x) / width * 100)
     }
 
     // MARK: mouse
@@ -182,9 +353,11 @@ final class BarView: NSView {
                                        owner: self, userInfo: nil))
     }
 
+    private func point(_ event: NSEvent) -> NSPoint { convert(event.locationInWindow, from: nil) }
+
     private func item(at event: NSEvent) -> String? {
-        let point = convert(event.locationInWindow, from: nil)
-        return items.last { Double(point.x) >= $0.x && Double(point.x) < $0.x + $0.length }?.name
+        let point = point(event)
+        return items.last { $0.kind != "bracket" && $0.rect.contains(point) }?.name
     }
 
     private func hover(_ name: String?) {
@@ -206,7 +379,28 @@ final class BarView: NSView {
 
     override func mouseMoved(with event: NSEvent) { hover(item(at: event)) }
 
-    override func mouseDown(with event: NSEvent) { click(event, "left") }
+    override func mouseDown(with event: NSEvent) {
+        if let hit = slider(at: point(event)) {
+            sliding = hit.name
+            onSlide?(hit.name, hit.percentage, Self.modifier(event.modifierFlags), false)
+            return
+        }
+        click(event, "left")
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let sliding, let item = items.first(where: { $0.name == sliding }), item.props.slider.width > 0 else { return }
+        let percentage = (Double(point(event).x) - item.parts.middle) / item.props.slider.width * 100
+        onSlide?(sliding, percentage, Self.modifier(event.modifierFlags), false)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let sliding, let item = items.first(where: { $0.name == sliding }), item.props.slider.width > 0 else { return }
+        self.sliding = nil
+        let percentage = (Double(point(event).x) - item.parts.middle) / item.props.slider.width * 100
+        onSlide?(sliding, percentage, Self.modifier(event.modifierFlags), true)
+    }
+
     override func rightMouseDown(with event: NSEvent) { click(event, "right") }
     override func otherMouseDown(with event: NSEvent) { click(event, "other") }
 
@@ -230,19 +424,27 @@ final class BarView: NSView {
     }
 }
 
-// The bar window's background blur: private, on our own window (no SIP needed).
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+// The window's background blur: private, on our own window (no SIP needed).
 @_silgen_name("CGSMainConnectionID")
 private func CGSMainConnectionID() -> Int32
 @_silgen_name("CGSSetWindowBackgroundBlurRadius")
 @discardableResult
 private func CGSSetWindowBackgroundBlurRadius(_ connection: Int32, _ window: UInt32, _ radius: Int32) -> Int32
 
-/// The bar of one display: a borderless, click-through-free panel on every Space.
+/// The bar of one display, or a popup: a borderless panel that never takes the focus,
+/// holding the item view over the glass views of its glass backgrounds.
 final class BarWindow {
     let panel: NSPanel
     let view = BarView()
     /// 1-based, NSScreen order (1 = main)
     let display: Int
+    private let root = FlippedView()
+    private var panelGlass: NSView?
+    private var itemGlass: [NSView] = []
 
     init(display: Int) {
         self.display = display
@@ -253,7 +455,11 @@ final class BarWindow {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.acceptsMouseMovedEvents = true
-        panel.contentView = view
+        root.frame = NSRect(x: 0, y: 0, width: 100, height: 25)
+        view.frame = root.bounds
+        view.autoresizingMask = [.width, .height]
+        root.addSubview(view)
+        panel.contentView = root
     }
 
     func configure(_ bar: BarProps, screen: NSScreen) {
@@ -263,16 +469,70 @@ final class BarWindow {
         let y = bar.position == "bottom" ? frame.minY + bar.yOffset : frame.maxY - height - bar.yOffset
         panel.setFrame(NSRect(x: frame.minX + bar.margin, y: y, width: max(1, frame.width - 2 * bar.margin), height: max(1, height)),
                        display: false)
-        switch bar.topmost {
-            case "on": panel.level = .statusBar
-            case "window": panel.level = .floating
-            default: panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.backstopMenu)))
-        }
-        panel.collectionBehavior = bar.sticky
-            ? [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-            : [.ignoresCycle, .fullScreenAuxiliary]
+        panel.level = Self.level(bar.topmost)
+        panel.collectionBehavior = Self.behavior(sticky: bar.sticky)
         panel.hasShadow = bar.shadow
-        view.bar = bar
-        CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), UInt32(panel.windowNumber), Int32(bar.blurRadius))
+        view.style = PanelStyle(bar: bar)
+        setBlur(bar.glass == "off" ? bar.blurRadius : 0)
+    }
+
+    func configurePopup(_ popup: PopupProps, frame: NSRect, bar: BarProps) {
+        panel.setFrame(frame, display: false)
+        panel.level = popup.topmost ? .popUpMenu : NSWindow.Level(rawValue: Self.level(bar.topmost).rawValue + 1)
+        panel.collectionBehavior = Self.behavior(sticky: bar.sticky)
+        panel.hasShadow = false
+        view.style = PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing)
+        setBlur(view.style.glass == "off" ? popup.blurRadius : 0)
+    }
+
+    private static func level(_ topmost: String) -> NSWindow.Level {
+        switch topmost {
+            case "on": return .statusBar
+            case "window": return .floating
+            default: return NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.backstopMenu)))
+        }
+    }
+
+    private static func behavior(sticky: Bool) -> NSWindow.CollectionBehavior {
+        sticky ? [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary] : [.ignoresCycle, .fullScreenAuxiliary]
+    }
+
+    private var blur = -1.0
+
+    private func setBlur(_ radius: Double) {
+        guard radius != blur else { return }
+        blur = radius
+        CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), UInt32(panel.windowNumber), Int32(radius))
+    }
+
+    /// Glass views under the view: one for the window when its style asks for it, one per
+    /// glass background; call it after setting the view's items.
+    func updateGlass() {
+        let style = view.style
+        if style.glass != "off" {
+            let glass = panelGlass ?? Glass.makeView()
+            if panelGlass == nil {
+                glass.frame = root.bounds
+                glass.autoresizingMask = [.width, .height]
+                root.addSubview(glass, positioned: .below, relativeTo: nil)
+                panelGlass = glass
+            }
+            Glass.update(glass, style: style.glass, tint: style.color, cornerRadius: style.cornerRadius)
+        } else if let glass = panelGlass {
+            glass.removeFromSuperview()
+            panelGlass = nil
+        }
+        let backgrounds = view.glassBackgrounds()
+        while itemGlass.count > backgrounds.count { itemGlass.removeLast().removeFromSuperview() }
+        while itemGlass.count < backgrounds.count {
+            let glass = Glass.makeView()
+            root.addSubview(glass, positioned: .below, relativeTo: view)
+            itemGlass.append(glass)
+        }
+        for (glass, background) in zip(itemGlass, backgrounds) {
+            glass.frame = background.rect
+            Glass.update(glass, style: background.background.glass, tint: background.background.color,
+                         cornerRadius: min(background.background.cornerRadius, background.rect.height / 2))
+        }
     }
 }
