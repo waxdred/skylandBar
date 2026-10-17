@@ -62,16 +62,18 @@ final class MetalGlass: GlassRenderer {
         self.shapes = shapes
         self.settings = settings
         self.window = window
-        if shapes.isEmpty {
+        if shapes.isEmpty && settings.captureArea == nil {
             capture.stop()
         } else if let screen = window.screen ?? NSScreen.main,
                   let display = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         {
-            // the window in the display's points, top-left origin, as ScreenCaptureKit counts
-            let frame = window.frame, screenFrame = screen.frame
-            let local = CGRect(x: frame.minX - screenFrame.minX, y: screenFrame.maxY - frame.maxY, width: frame.width, height: frame.height)
-            capture.follow(display: display, window: local, screen: CGSize(width: screenFrame.width, height: screenFrame.height),
-                           scale: screen.backingScaleFactor)
+            // in the display's points, top-left origin, as ScreenCaptureKit counts
+            let screenFrame = screen.frame
+            let local = { (frame: NSRect) in
+                CGRect(x: frame.minX - screenFrame.minX, y: screenFrame.maxY - frame.maxY, width: frame.width, height: frame.height)
+            }
+            capture.follow(display: display, window: local(window.frame), area: local(settings.captureArea ?? window.frame).union(local(window.frame)),
+                           screen: CGSize(width: screenFrame.width, height: screenFrame.height), scale: screen.backingScaleFactor)
         }
         render()
     }
@@ -185,16 +187,17 @@ final class BackdropCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var window = CGRect.zero
     private let queue = DispatchQueue(label: "skylandbar.glass.capture", qos: .userInteractive)
 
-    /// Captures around `window` (display points, top-left origin) on `display`.
-    func follow(display: CGDirectDisplayID, window: CGRect, screen: CGSize, scale: CGFloat) {
+    /// Captures around `area` (display points, top-left origin; the window, or more) on
+    /// `display`; `window` is where the picture is drawn.
+    func follow(display: CGDirectDisplayID, window: CGRect, area: CGRect, screen: CGSize, scale: CGFloat) {
         self.window = window
-        let moved = display != self.display || scale != self.scale || !region.contains(window)
+        let moved = display != self.display || scale != self.scale || !region.contains(area)
         let now = ProcessInfo.processInfo.systemUptime
         guard moved || (!excludesSelf && now - lastAsk > 1), !asking else { return }
         self.display = display
         self.scale = scale
         let margin: CGFloat = 48
-        region = window.insetBy(dx: -margin, dy: -margin).intersection(CGRect(origin: .zero, size: screen)).integral
+        region = area.insetBy(dx: -margin, dy: -margin).intersection(CGRect(origin: .zero, size: screen)).integral
         start()
     }
 

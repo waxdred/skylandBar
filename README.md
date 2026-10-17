@@ -250,10 +250,9 @@ What makes this possible, for any config:
   into the screen's edge; 14 and 6 closed) and `notch.color` (black). `notch.open=on|off|toggle`
   opens or closes it from a script (on media_change, for example), and items can subscribe to
   `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
-  one at the top middle of the main display. `notch.glass=on` (or `clear`): instead of the black
-  panel, a glass panel (the bar's glass engine, `notch.color` its tint) drops out from under the
-  notch, from the notch's width down and out to its own, `notch.gap` (6) below the notch; the
-  camera's black stays the notch. examples/liquid-glass.toml has one, 520 pt wide.
+  one at the top middle of the main display. `notch.glass=on` (or `clear`): the same shape on the same
+  springs, of glass (the bar's glass engine, `notch.color` its tint); closed, it is the black
+  notch. examples/liquid-glass.toml has one.
 
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes

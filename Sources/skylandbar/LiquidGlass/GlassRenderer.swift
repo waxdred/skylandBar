@@ -32,6 +32,9 @@ struct GlassSettings: Equatable {
     var lensStretch = 1.0
     /// the Reduce Motion setting: lenses do not slide
     var reduceMotion = false
+    /// screen (AppKit) area to see behind even with no glass yet: a glass notch, closed, keeps
+    /// what is behind its open size ready, so it has glass from its first frame
+    var captureArea: NSRect?
 
     init() {}
 

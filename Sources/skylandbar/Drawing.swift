@@ -664,7 +664,7 @@ final class BarWindow {
         }
         // an engine that failed (the capture stopped) gives way to the backdrop, for good
         if glass?.failed == true { glassFailed = true }
-        let engine = shapes.isEmpty ? nil : glassFailed ? "backdrop" : GlassEngine.resolve(settings.engine)
+        let engine = shapes.isEmpty && settings.captureArea == nil ? nil : glassFailed ? "backdrop" : GlassEngine.resolve(settings.engine)
         if engine != glassEngine {
             glass?.view.removeFromSuperview()
             glass = engine.map(GlassEngine.make)

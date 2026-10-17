@@ -111,7 +111,7 @@ background = { glass = "regular", color = "${glass_tint}", height = 36, corner_r
 [[item]]
 type = "notch"
 name = "island"
-notch = { width = 600, height = 190, padding = 16 }   # boringNotch: black, 640 x 190 with its top curves; glass = "regular" for glass
+notch = { glass = "regular", color = "${glass_tint}", width = 600, height = 190, padding = 16 }   # boringNotch's shape and springs, of glass (without glass: black)
 
 [[item]]
 name = "island.date"
