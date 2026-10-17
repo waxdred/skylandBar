@@ -34,7 +34,9 @@ public struct ScriptRun: Equatable {
 /// What a message did, for the app to carry out.
 public struct Outcome: Equatable {
     public var output = ""
+    /// "[!]" errors fail the call, "[?]" warnings do not (sketchybar's exit status)
     public var errors: [String] = []
+    public var failed: Bool { errors.contains { $0.hasPrefix("[!]") } }
     public var scripts: [ScriptRun] = []
     /// items or the bar look changed
     public var redraw = false
@@ -112,6 +114,8 @@ public final class BarModel {
     public private(set) var defaults = ItemProps()
     /// custom events and their NSDistributedNotification name ("" none)
     public private(set) var events: [String: String] = [:]
+    /// how many --update arrived: a config that sent one got its forced run
+    public private(set) var updates = 0
     /// filled by the app before a query: item name -> display key ("display-1") -> rect
     public var frames: [String: [String: Box]] = [:]
     /// filled by the app before a query
@@ -157,6 +161,12 @@ public final class BarModel {
             }
         }
         return items.indices.filter { items[$0].name == target }
+    }
+
+    /// a /regex/ matching nothing is only a warning, like in sketchybar
+    private func noMatch(_ command: String, _ target: String) -> String {
+        target.count > 2 && target.hasPrefix("/") && target.hasSuffix("/")
+            ? "[?] \(command): no match for \(target)" : "[!] \(command): no item '\(target)'"
     }
 
     public func execute(_ commands: [Command]) -> Outcome {
@@ -218,7 +228,7 @@ public final class BarModel {
                 add(kind, name, args, &o)
             case .set(let target, let props):
                 let matches = indices(matching: target)
-                if matches.isEmpty { return o.errors.append("[!] Set: no item '\(target)'") }
+                if matches.isEmpty { return o.errors.append(noMatch("Set", target)) }
                 for index in matches {
                     let before = displayed(items[index])
                     defer {
@@ -241,7 +251,7 @@ public final class BarModel {
                 }
             case .subscribe(let target, let names):
                 let matches = indices(matching: target)
-                if matches.isEmpty { return o.errors.append("[!] Subscribe: no item '\(target)'") }
+                if matches.isEmpty { return o.errors.append(noMatch("Subscribe", target)) }
                 for name in names where !builtinEvents.contains(name) && events[name] == nil {
                     o.errors.append("[!] Subscribe: no event '\(name)' (--add event \(name))")
                 }
@@ -256,7 +266,7 @@ public final class BarModel {
                 o.scripts += scripts(for: event, info: vars["INFO"] ?? "", env: vars)
             case .remove(let target):
                 let matches = Set(indices(matching: target))
-                if matches.isEmpty { return o.errors.append("[!] Remove: no item '\(target)'") }
+                if matches.isEmpty { return o.errors.append(noMatch("Remove", target)) }
                 for index in matches { itemTransitions[items[index].name] = nil }
                 items = items.enumerated().filter { !matches.contains($0.offset) }.map(\.element)
                 o.redraw = true
@@ -315,6 +325,7 @@ public final class BarModel {
             case .query(let what):
                 query(what, &o)
             case .update:
+                updates += 1
                 o.scripts += scripts(for: "forced")
                 o.redraw = true
             case .reload(let path):
@@ -333,7 +344,7 @@ public final class BarModel {
             o.eventsChanged = true
             return
         }
-        guard item(named: name) == nil else { return o.errors.append("[!] Add \(kind): '\(name)' already exists") }
+        guard item(named: name) == nil else { return o.errors.append("[?] Add \(kind): '\(name)' already exists") }
         var props = defaults
         switch kind {
             case "item", "alias", "space", "graph", "slider", "workspaces", "title":

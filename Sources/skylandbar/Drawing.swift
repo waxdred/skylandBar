@@ -8,48 +8,16 @@ import SkylandBarCore
 enum Fonts {
     private static var cache: [FontSpec: NSFont] = [:]
 
-    /// "Hack Nerd Font:Bold:14.0": the family's face named Bold, else a font of that
-    /// PostScript name, else the family at the style's weight, else the system font.
+    /// "Hack Nerd Font:Bold:14.0": CoreText's match for that family and style, as sketchybar
+    /// does (a missing family gives CoreText's fallback, Helvetica, there too).
     static func font(_ spec: FontSpec) -> NSFont {
         if let font = cache[spec] { return font }
-        let size = CGFloat(spec.size)
-        var font: NSFont? = nil
-        let descriptor = NSFontDescriptor(fontAttributes: [.family: spec.family, .face: spec.style])
-        if let exact = NSFont(descriptor: descriptor, size: size), exact.familyName == spec.family {
-            font = exact
-        } else if let named = NSFont(name: spec.family, size: size) ?? NSFont(name: "\(spec.family)-\(spec.style)", size: size) {
-            font = named
-        } else {
-            font = NSFontManager.shared.font(withFamily: spec.family, traits: [], weight: managerWeight(spec.style), size: size)
-        }
-        let result = font ?? NSFont.systemFont(ofSize: size, weight: weight(spec.style))
+        let descriptor = CTFontDescriptorCreateWithAttributes([
+            kCTFontFamilyNameAttribute: spec.family, kCTFontStyleNameAttribute: spec.style, kCTFontSizeAttribute: spec.size,
+        ] as CFDictionary)
+        let result = CTFontCreateWithFontDescriptor(descriptor, 0, nil) as NSFont
         cache[spec] = result
         return result
-    }
-
-    private static func weight(_ style: String) -> NSFont.Weight {
-        switch style.lowercased() {
-            case "ultralight", "thin": return .thin
-            case "light": return .light
-            case "medium": return .medium
-            case "semibold": return .semibold
-            case "bold": return .bold
-            case "heavy", "extrabold": return .heavy
-            case "black": return .black
-            default: return .regular
-        }
-    }
-
-    /// NSFontManager's 0...15 scale, 5 regular, 9 bold
-    private static func managerWeight(_ style: String) -> Int {
-        switch style.lowercased() {
-            case "light": return 3
-            case "medium": return 6
-            case "semibold": return 8
-            case "bold": return 9
-            case "heavy", "black": return 11
-            default: return 5
-        }
     }
 
     static func color(_ color: ARGB) -> NSColor {
@@ -77,9 +45,13 @@ enum Fonts {
     }
 
     /// The width a text takes, without its paddings.
-    static func width(_ text: TextProps) -> Double {
-        if text.shown.isEmpty { return 0 }
-        return ceil(NSAttributedString(string: text.shown, attributes: [.font: font(text.font)]).size().width)
+    static func width(_ text: TextProps) -> Double { width(text.shown, font(text.font)) }
+
+    /// sketchybar's: the glyphs' drawn width plus about a pixel, not the advance (Nerd Font
+    /// icons draw wider than they advance); 1 for no string, as there
+    static func width(_ string: String, _ font: NSFont) -> Double {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font]))
+        return floor(CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).width + 1.5)
     }
 }
 
@@ -221,7 +193,7 @@ final class BarView: NSView {
         let string = scroll && text.scrolls ? text.scrolled(Int(CACurrentMediaTime() / max(0.01, text.scrollDuration / 400))) : text.shown
         guard !string.isEmpty else { return }
         let font = Fonts.font(text.font)
-        let measured = ceil(NSAttributedString(string: string, attributes: [.font: font]).size().width)
+        let measured = Fonts.width(string, font)
         var textX = start
         switch text.align {
             case "center": textX += (width - measured) / 2
@@ -230,8 +202,14 @@ final class BarView: NSView {
         }
         NSGraphicsContext.saveGraphicsState()
         if text.width != nil || scroll { NSRect(x: start, y: 0, width: width, height: bounds.height).clip() }
+        // sketchybar's baseline: below the middle by half of the line's ascent minus its
+        // descent, rounded down on its y-up bar
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font])), &ascent, &descent, nil)
+        let baseline = mid + ceil((ascent - descent) / 2) - text.yOffset
+        // without .usesLineFragmentOrigin the rect's origin is the baseline
         NSAttributedString(string: string, attributes: Fonts.attributes(text))
-            .draw(at: NSPoint(x: textX, y: mid - (font.ascender - font.descender) / 2 - text.yOffset))
+            .draw(with: NSRect(x: textX, y: baseline, width: 1e5, height: 0), options: [])
         NSGraphicsContext.restoreGraphicsState()
     }
 
@@ -297,15 +275,16 @@ final class BarView: NSView {
     }
 
     /// `background.clip` (0...1): how much of the bar under a background is cut out, so
-    /// what is behind the bar shows through it.
+    /// what is behind the bar shows through it. A glass background cuts it all: its glass
+    /// view is under this view.
     private func clipBackgrounds() {
-        let clipped = drawnBackgrounds().filter { $0.background.clip > 0 }
+        let clipped = drawnBackgrounds().filter { $0.background.clip > 0 || $0.background.glass != "off" }
         guard !clipped.isEmpty, let context = NSGraphicsContext.current else { return }
         NSGraphicsContext.saveGraphicsState()
         context.compositingOperation = .destinationOut
         for (rect, background) in clipped {
             let radius = min(background.cornerRadius, rect.height / 2, rect.width / 2)
-            NSColor(white: 0, alpha: min(1, background.clip)).setFill()
+            NSColor(white: 0, alpha: background.glass != "off" ? 1 : min(1, background.clip)).setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
         }
         NSGraphicsContext.restoreGraphicsState()

@@ -1,8 +1,9 @@
 /// Where items go on a bar, like sketchybar: `left` items from the left edge in the order
 /// they were added, `right` items from the right edge (the first one added is the
 /// rightmost), `center` items centered, `q` / `e` items to the left / right of the notch.
-/// An item takes `background.padding_left + length + background.padding_right`; its
-/// content (and background) starts after `background.padding_left`.
+/// An item takes `background.padding_left + length + background.padding_right`, or just its
+/// fixed `width` (the paddings inside it); its content (and background) starts after
+/// `background.padding_left`.
 public enum Layout {
     public struct Slot: Equatable {
         public var name: String
@@ -10,16 +11,19 @@ public enum Layout {
         public var length: Double
         public var paddingLeft: Double
         public var paddingRight: Double
+        /// a fixed `width`: the item takes `length` only, like sketchybar
+        public var fixed: Bool
 
-        public init(name: String, position: String, length: Double, paddingLeft: Double, paddingRight: Double) {
+        public init(name: String, position: String, length: Double, paddingLeft: Double, paddingRight: Double, fixed: Bool = false) {
             self.name = name
             self.position = position
             self.length = length
             self.paddingLeft = paddingLeft
             self.paddingRight = paddingRight
+            self.fixed = fixed
         }
 
-        var span: Double { paddingLeft + length + paddingRight }
+        var span: Double { fixed ? length : paddingLeft + length + paddingRight }
     }
 
     /// The x of each item's content, by name, on a bar `width` wide.
@@ -39,9 +43,8 @@ public enum Layout {
         func backward(_ items: [Slot], from end: Double) {
             var cursor = end
             for item in items {
-                cursor -= item.paddingRight + item.length
-                result[item.name] = cursor
-                cursor -= item.paddingLeft
+                result[item.name] = cursor - item.paddingRight - item.length
+                cursor -= item.span
             }
         }
         let notchLeft = (width - notchWidth) / 2 + notchOffset

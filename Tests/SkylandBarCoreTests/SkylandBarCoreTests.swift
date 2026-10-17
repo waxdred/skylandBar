@@ -118,6 +118,15 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(xs["c"], 479.5) // (1000 - 45) / 2 + 2
         XCTAssertEqual(xs["q"], 387) // 400 - 3 - 10
         XCTAssertEqual(xs["e"], 602) // 600 + 2
+
+        // a fixed width holds the paddings: the next item starts right after it
+        let fixed = Layout.Slot(name: "f", position: "left", length: 36, paddingLeft: 4, paddingRight: 4, fixed: true)
+        let fs = Layout.place([fixed, slot("n", "left", 10), Layout.Slot(name: "rf", position: "right", length: 36, paddingLeft: 4, paddingRight: 4, fixed: true),
+                               slot("rn", "right", 10)], width: 1000, paddingLeft: 12, paddingRight: 8, notchWidth: 0, notchOffset: 0)
+        XCTAssertEqual(fs["f"], 16) // 12 + 4
+        XCTAssertEqual(fs["n"], 50) // 12 + 36 + 2
+        XCTAssertEqual(fs["rf"], 952) // 992 - 4 - 36
+        XCTAssertEqual(fs["rn"], 943) // 992 - 36 - 3 - 10
     }
 
     func testLength() {
@@ -141,7 +150,9 @@ final class ModelTests: XCTestCase {
                         "--add", "item", "c", "right"])
         XCTAssertEqual(model.items.map(\.name), ["a", "b", "c"])
         XCTAssertEqual(model.item(named: "a")?.props.icon.color.value, 0xFF00_FF00) // defaults apply to new items
-        XCTAssertFalse(send(model, ["--add", "item", "a", "left"]).errors.isEmpty) // already there
+        let again = send(model, ["--add", "item", "a", "left"]) // already there: a warning, as in sketchybar
+        XCTAssertFalse(again.errors.isEmpty)
+        XCTAssertFalse(again.failed)
 
         _ = send(model, ["--set", "/[ab]/", "label=x"])
         XCTAssertEqual(model.items.map(\.props.label.string), ["x", "x", ""])
@@ -154,7 +165,8 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(model.items.map(\.name), ["clock", "clock2", "a", "b"])
         _ = send(model, ["--remove", "/clock/"])
         XCTAssertEqual(model.items.map(\.name), ["a", "b"])
-        XCTAssertFalse(send(model, ["--set", "nothing", "label=x"]).errors.isEmpty)
+        XCTAssertTrue(send(model, ["--set", "nothing", "label=x"]).failed)
+        XCTAssertFalse(send(model, ["--remove", "/^nothing/"]).failed) // a regex matching nothing: a warning
     }
 
     func testScripts() {

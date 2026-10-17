@@ -120,7 +120,7 @@ final class BarApp {
                 let outcome = model.execute(commands)
                 apply(outcome)
                 let errors = outcome.errors.map { $0 + "\n" }.joined()
-                return (outcome.errors.isEmpty, outcome.output + errors)
+                return (!outcome.failed, outcome.output + errors)
         }
     }
 
@@ -243,7 +243,7 @@ final class BarApp {
             .first { FileManager.default.fileExists(atPath: $0) }
     }
 
-    /// Runs the config, then every script once (`forced`), like sketchybar.
+    /// Runs the config, then every script once (`forced`) unless it sent `--update`.
     private func runConfig() {
         guard let file = configFile else {
             FileHandle.standardError.write(Data("skylandbar: no config (~/.config/skylandbar/skylandbarrc or ~/.config/sketchybar/sketchybarrc)\n".utf8))
@@ -254,15 +254,17 @@ final class BarApp {
         if hotloadOn { watch(file) }
     }
 
-    /// Runs a config, then every script once when it ends; a config that keeps running
-    /// (SbarLua's event loop) gets that after 2 seconds.
+    /// Runs a config, then every script once when it ends, unless the config sent `--update`
+    /// (sketchybar's own forced run: twice would race scripts writing the same files); a
+    /// config that keeps running (SbarLua's event loop) gets that after 2 seconds.
     private func run(_ file: String) {
         scripts.configDir = (file as NSString).deletingLastPathComponent
         var forced = false
+        let updates = model.updates
         let force = { [weak self] in
             guard let self, !forced else { return }
             forced = true
-            self.scripts.run(self.model.scripts(for: "forced"))
+            if self.model.updates == updates { self.scripts.run(self.model.scripts(for: "forced")) }
             self.scripts.run(self.model.spaceChange().filter { run in self.model.item(named: run.item)?.kind == "space" })
             self.setNeedsLayout()
         }
@@ -504,7 +506,8 @@ final class BarApp {
             let lengths = zip(props, middles).map { Layout.length(of: $0, middle: $1, measure: Fonts.width, image: Images.width) }
             let slots = shown.indices.map { index in
                 Layout.Slot(name: shown[index].name, position: props[index].position, length: lengths[index],
-                            paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight)
+                            paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight,
+                            fixed: props[index].width != nil)
             }
             let xs = Layout.place(slots, width: width, paddingLeft: bar.paddingLeft, paddingRight: bar.paddingRight,
                                   notchWidth: bar.notchWidth, notchOffset: bar.notchOffset)
@@ -570,7 +573,8 @@ final class BarApp {
         let lengths = zip(props, middles).map { Layout.length(of: $0, middle: $1, measure: Fonts.width, image: Images.width) }
         let slots = children.indices.map { index in
             Layout.Slot(name: children[index].name, position: "popup", length: lengths[index],
-                        paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight)
+                        paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight,
+                        fixed: props[index].width != nil)
         }
         let laid = Layout.popup(slots, horizontal: popup.horizontal, rowHeight: row, inset: popup.background.drawing ? popup.background.borderWidth : 0)
         let x = Layout.popupX(align: popup.align, itemX: Double(anchor.rect.minX), itemLength: Double(anchor.rect.width), width: laid.width)
