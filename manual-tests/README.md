@@ -29,5 +29,6 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `13-perf.sh` | CPU et mémoire : repos, pluie de `--set`, animation continue |
 | `14-notch.sh` | l'encoche façon boringNotch : survol, animation, contenu, script, `fake` |
 | `15-toml.sh` | `skylandbar.toml` : `--export`, `--check`, chargement, hotload |
+| `16-liquid-glass.sh` | le thème Liquid Glass : capsules, survol, popup, clair / sombre, accessibilité |
 
 Note ce qui ne va pas (le numéro du script et la case) et envoie-le avec une capture.

@@ -1,0 +1,76 @@
+# Liquid Glass: skylandbar after Apple's Liquid Glass (macOS 26)
+#   https://developer.apple.com/documentation/technologyoverviews/liquid-glass
+#   https://developer.apple.com/documentation/appkit/nsglasseffectview
+#   https://github.com/giorgio-a11y/liquid-glass-guide (the numbers)
+#
+# Include it before your items: include = "themes/liquid-glass.toml" (next to skylandbar.toml).
+# What it applies:
+# - Glass is the layer of controls that floats over the content, used sparingly: the bar itself
+#   has none (a full-width glass background would put glass under glass); your groups of items
+#   get it (background.glass = "regular" on a bracket, see examples/liquid-glass.toml).
+# - NSGlassEffectView with its default shape, a capsule (corner_radius = 0 on glass), and
+#   corners concentric to their container elsewhere (corner_radius = "concentric").
+# - Groups of glass in an NSGlassEffectContainerView: one render pass, and shapes closer than
+#   glass_spacing merge into one, as Apple's containers do.
+# - Color sparingly: text in primary / secondary, one tinted element (the focused
+#   workspace) for prominence, system colors in their light and dark variants (reloaded when
+#   the appearance changes), a 0.04 hover fill.
+# - SF Pro, 11 pt at least, no Thin / Light weights; SF Symbols for icons; an 8 pt grid.
+# - Reduce Transparency and Increase Contrast change the glass by themselves; Reduce Motion
+#   ends skylandbar's animations at once.
+
+[vars]
+font = "SF Pro"
+# shapes: large containers 16, rows 12, small elements 8 (capsules are corner_radius = 0)
+radius_large = 16
+radius_row = 12
+radius_small = 8
+# hover: easeInOut 0.15 s (skylandbar's hover state); springs about 0.3 s
+spring = 18
+
+[vars.dark]
+primary = "0xffffffff"     # .primary
+secondary = "0x99ffffff"   # .secondary (60 %)
+tertiary = "0x4cffffff"    # .tertiary (30 %)
+hover = "0x0affffff"       # primary at 0.04
+accent = "0xff0a84ff"      # systemBlue
+accent_soft = "0x260a84ff" # accent at 0.15: tinted icon backgrounds
+green = "0xff30d158"
+orange = "0xffff9f0a"
+red = "0xffff453a"
+purple = "0xffbf5af2"
+shadow = "0x66000000"
+
+[vars.light]
+primary = "0xff000000"
+secondary = "0x99000000"
+tertiary = "0x4c000000"
+hover = "0x0a000000"
+accent = "0xff007aff"
+accent_soft = "0x26007aff"
+green = "0xff34c759"
+orange = "0xffff9500"
+red = "0xffff3b30"
+purple = "0xffaf52de"
+shadow = "0x33000000"
+
+[bar]
+# no glass and no color under the whole bar: only the groups of controls get glass
+color = "0x00000000"
+glass = "off"
+blur_radius = 0
+height = 40
+margin = 8
+y_offset = 4
+padding_left = 8
+padding_right = 8
+corner_radius = 20         # what "concentric" corners inside the bar follow
+glass_spacing = 8          # glass shapes nearer than 8 pt merge (NSGlassEffectContainerView)
+font_smoothing = false
+
+[defaults]
+icon = { font = "${font}:Semibold:14", color = "${primary}", padding_left = 12, padding_right = 4 }
+label = { font = "${font}:Medium:13", color = "${primary}", padding_right = 12 }
+background = { height = 28, corner_radius = "concentric", drawing = false }
+# popups: a glass panel, large radius, rows on the 8 pt grid
+popup = { y_offset = 8, height = 32, align = "center", background = { glass = "regular", corner_radius = "${radius_large}", drawing = true } }

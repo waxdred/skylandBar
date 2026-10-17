@@ -80,6 +80,39 @@ skylandbar --check                                           # check the file wi
 `--export` writes what each item has that differs from the defaults, with the scripts as they are
 and the labels as they are now.
 
+## The Liquid Glass theme
+
+`themes/liquid-glass.toml` follows Apple's Liquid Glass
+([overview](https://developer.apple.com/documentation/technologyoverviews/liquid-glass),
+[NSGlassEffectView](https://developer.apple.com/documentation/appkit/nsglasseffectview)) with the
+numbers of the [Liquid Glass guide](https://github.com/giorgio-a11y/liquid-glass-guide).
+`examples/liquid-glass.toml` is a bar made with it:
+
+```sh
+mkdir -p ~/.config/skylandbar/themes
+cp themes/liquid-glass.toml ~/.config/skylandbar/themes/
+cp examples/liquid-glass.toml ~/.config/skylandbar/skylandbar.toml
+```
+
+| Apple's rule | In skylandbar |
+| --- | --- |
+| Glass is the control layer over the content, used sparingly, never glass on glass | the bar has no background; each group of controls is one glass capsule (`background.glass` on a bracket) |
+| Default shape: a capsule; corners concentric to their container | `corner_radius = 0` on glass is a capsule; `corner_radius = "concentric"` follows the bar's or the popup's radius |
+| Group glass in a container: one render pass, nearby shapes merge | each window's glass views sit in an `NSGlassEffectContainerView`; `glass_spacing` on the bar is its spacing |
+| Tint only for prominence; system colors with light and dark variants | one tinted element (the focused workspace); `[vars.dark]` / `[vars.light]`, reloaded when the appearance changes |
+| Hover at primary 0.04, easeInOut 0.15 s; springs about 0.3 s | `hover.*`: an item's look under the mouse, animated in 9 frames; workspaces in 18 |
+| SF Pro 11 pt or more, no Thin / Light; SF Symbols; 8 pt grid | the theme's fonts, icons and paddings |
+| Reduce Transparency, Increase Contrast, Reduce Motion | the first two change the system's glass by themselves; Reduce Motion ends skylandbar's animations at once |
+
+What makes this possible, for any config:
+
+- `include = "themes/x.toml"` (before any section, relative to the config's folder): a theme's
+  vars, bar, defaults and items first, then yours, which can change them.
+- `[vars.dark]` and `[vars.light]`: vars after the appearance. The config loads again when it
+  changes, and scripts get `appearance_change` (INFO dark or light) and `APPEARANCE`.
+- `hover.<property>` on any item, a workspaces component too: its look while the mouse is on it.
+- `corner_radius = "concentric"`, `glass_spacing`, and capsules for glass.
+
 ## What works
 
 | Area | Supported |

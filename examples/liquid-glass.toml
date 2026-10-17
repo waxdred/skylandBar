@@ -1,0 +1,105 @@
+# A Liquid Glass bar for skyland: three groups of controls, each one glass capsule, on a bar
+# with no background. Install:
+#   mkdir -p ~/.config/skylandbar/themes
+#   cp themes/liquid-glass.toml ~/.config/skylandbar/themes/
+#   cp examples/liquid-glass.toml ~/.config/skylandbar/skylandbar.toml
+include = "themes/liquid-glass.toml"
+hotload = true
+
+# --- left: skyland's workspaces, one glass group --------------------------------------------
+
+[[item]]
+type = "workspaces"
+name = "ws"
+position = "left"
+icon = { color = "${secondary}", padding_left = 10, padding_right = 4 }
+label = { string = "{apps}", font = "${font}:Medium:11", color = "${secondary}", padding_right = 10 }
+background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+# the one tinted element: prominence for where you are
+focused = { icon.color = "${accent}", label.color = "${primary}", background.color = "${accent_soft}" }
+empty = { label.string = "", icon.padding_right = 10 }
+hover = { background.color = "${hover}" }
+workspaces = { animation = "tanh", animation_frames = "${spring}" }
+
+[[item]]
+type = "bracket"
+name = "workspaces.glass"
+members = ["/^ws\\./"]
+background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+
+# --- center: the focused window, its own glass capsule --------------------------------------
+
+[[item]]
+type = "title"
+name = "window"
+position = "center"
+title = { app_icon = "on", format = "app_title" }
+label = { max_chars = 48, padding_left = 6, padding_right = 14 }
+icon = { padding_left = 8, background = { height = 22, image.scale = 0.55 } }
+background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+
+# --- right: status, one glass group; a click opens a glass panel ----------------------------
+
+[[item]]
+name = "clock"
+position = "right"
+icon = "􀐫"
+update_freq = 10
+script = '''
+[ "$SENDER" = mouse.exited.global ] && exec sketchybar --set "$NAME" popup.drawing=off
+sketchybar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"
+'''
+click_script = 'sketchybar --set "$NAME" popup.drawing=toggle'
+subscribe = ["system_woke", "mouse.exited.global"]
+hover = { background.color = "${hover}", background.drawing = true }
+background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+
+[[item]]
+name = "clock.date"
+position = "popup.clock"
+icon = "􀉉"
+label = { string = "", font = "${font}:Semibold:13" }
+script = 'sketchybar --set "$NAME" label="$(date "+%A %d %B %Y")"'
+update_freq = 60
+hover = { background.color = "${hover}", background.drawing = true }
+background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+
+[[item]]
+name = "battery"
+position = "right"
+update_freq = 120
+script = '''
+percent=$(pmset -g batt | grep -Eo "[0-9]+%" | tr -d %)
+color="${primary}"   # the theme's colors, filled in when the file loads
+case 1 in
+  $(( percent > 75 ))) icon=􀛨 ;;
+  $(( percent > 50 ))) icon=􀺸 ;;
+  $(( percent > 25 ))) icon=􀺶 ;;
+  *) icon=􀛩; color="${red}" ;;   # red means one thing: low
+esac
+pmset -g batt | grep -q "AC Power" && icon=􀢋
+sketchybar --set "$NAME" icon="$icon" icon.color="$color" label="$percent%"
+'''
+subscribe = ["power_source_change", "system_woke", "appearance_change"]
+hover = { background.color = "${hover}", background.drawing = true }
+background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+
+[[item]]
+name = "volume"
+position = "right"
+icon = "􀊩"
+script = '''
+[ "$SENDER" = volume_change ] || exit 0
+icon=􀊩; [ "$INFO" -lt 66 ] && icon=􀊥; [ "$INFO" -lt 33 ] && icon=􀊡; [ "$INFO" -eq 0 ] && icon=􀊣
+sketchybar --set "$NAME" icon="$icon" label="$INFO%"
+'''
+subscribe = "volume_change"
+hover = { background.color = "${hover}", background.drawing = true }
+background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+
+[[item]]
+type = "bracket"
+name = "status.glass"
+members = ["volume", "battery", "clock"]
+background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+

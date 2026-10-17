@@ -8,6 +8,8 @@ final class ScriptRunner {
     var configDir: String
     /// what scripts (SbarLua above all) look the bar up by: git.felix.<barName>
     var barName = "skylandbar"
+    /// dark or light, for scripts (APPEARANCE) and [vars.dark] / [vars.light]
+    var appearance = "dark"
     let shimDir: String
     /// the scripts still running, stopped when the bar quits
     private var running = Set<Process>()
@@ -39,6 +41,7 @@ final class ScriptRunner {
         env["PATH"] = "\(shimDir):\(path):/opt/homebrew/bin:/usr/local/bin"
         env["CONFIG_DIR"] = configDir
         env["BAR_NAME"] = barName
+        env["APPEARANCE"] = appearance
         env["SKYLANDBAR_SCRIPT"] = "1"
         return env
     }

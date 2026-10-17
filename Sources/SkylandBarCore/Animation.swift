@@ -79,7 +79,7 @@ extension BackgroundProps {
         r.borderColor = .mix(a.borderColor, b.borderColor, t)
         r.borderWidth = mix(a.borderWidth, b.borderWidth, t)
         r.height = mix(a.height, b.height, t)
-        r.cornerRadius = mix(a.cornerRadius, b.cornerRadius, t)
+        r.cornerRadius = a.cornerRadius < 0 || b.cornerRadius < 0 ? b.cornerRadius : mix(a.cornerRadius, b.cornerRadius, t) // concentric: at once
         r.paddingLeft = mix(a.paddingLeft, b.paddingLeft, t)
         r.paddingRight = mix(a.paddingRight, b.paddingRight, t)
         r.xOffset = mix(a.xOffset, b.xOffset, t)
@@ -140,6 +140,7 @@ extension BarProps {
         r.yOffset = mix(a.yOffset, b.yOffset, t)
         r.cornerRadius = mix(a.cornerRadius, b.cornerRadius, t)
         r.blurRadius = mix(a.blurRadius, b.blurRadius, t)
+        r.glassSpacing = mix(a.glassSpacing, b.glassSpacing, t)
         r.paddingLeft = mix(a.paddingLeft, b.paddingLeft, t)
         r.paddingRight = mix(a.paddingRight, b.paddingRight, t)
         r.notchWidth = mix(a.notchWidth, b.notchWidth, t)

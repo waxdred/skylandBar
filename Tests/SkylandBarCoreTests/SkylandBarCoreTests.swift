@@ -748,3 +748,101 @@ final class ConfigFileTests: XCTestCase {
         }
     }
 }
+
+final class LiquidGlassTests: XCTestCase {
+    func testShapesAndSpacing() {
+        var background = BackgroundProps()
+        XCTAssertNil(background.apply("corner_radius", "concentric"))
+        XCTAssertEqual(background.cornerRadius, -1)
+        XCTAssertEqual(background.json["corner_radius"] as? String, "concentric")
+        XCTAssertNil(background.apply("corner_radius", "12"))
+        XCTAssertEqual(background.cornerRadius, 12)
+        XCTAssertNotNil(background.apply("corner_radius", "round"))
+        var bar = BarProps()
+        XCTAssertNil(bar.apply("glass_spacing", "8"))
+        XCTAssertEqual(bar.glassSpacing, 8)
+    }
+
+    func testReduceMotion() {
+        let model = BarModel()
+        model.reduceMotion = true
+        _ = send(model, ["--add", "item", "a", "left", "--animate", "tanh", "60", "--set", "a", "y_offset=10"])
+        XCTAssertEqual(model.displayed(model.item(named: "a")!).yOffset, 10) // there at once
+    }
+
+    func testHover() {
+        let model = BarModel()
+        var now = 0.0
+        model.clock = { now }
+        _ = send(model, ["--add", "item", "a", "left", "--set", "a", "background.color=0x00000000", "hover.background.color=0x0affffff",
+                         "--add", "item", "b", "left"])
+        XCTAssertEqual(model.item(named: "a")?.states["hover"], [Prop("background.color", "0x0affffff")])
+        XCTAssertFalse(send(model, ["--set", "a", "hover.nope=1"]).errors.isEmpty)
+        XCTAssertFalse(model.setHovered("b")) // nothing changes look
+        XCTAssertTrue(model.setHovered("a"))
+        XCTAssertEqual(model.target(model.item(named: "a")!).background.color.value, 0x0AFF_FFFF)
+        XCTAssertEqual(model.displayed(model.item(named: "a")!).background.color.value, 0) // on its way
+        now = 1
+        XCTAssertEqual(model.displayed(model.item(named: "a")!).background.color.value, 0x0AFF_FFFF)
+        XCTAssertTrue(model.setHovered(nil))
+        now = 2
+        XCTAssertEqual(model.displayed(model.item(named: "a")!).background.color.value, 0)
+        XCTAssertEqual(model.item(named: "a")?.props.background.color.value, 0) // the item's own properties never change
+        // workspace items take the component's hover
+        _ = send(model, ["--add", "workspaces", "ws", "left", "--set", "ws", "hover.y_offset=2"])
+        model.setWorkspaces([WorkspaceInfo(name: "1", display: 1, focused: true, visible: true)])
+        XCTAssertEqual(model.item(named: "ws.1")?.states["hover"], [Prop("y_offset", "2")])
+    }
+
+    func testIncludeAndAppearance() throws {
+        let theme = """
+            [vars]
+            radius = 16
+            [vars.dark]
+            text = "0xffffffff"
+            [vars.light]
+            text = "0xff000000"
+            [defaults]
+            label.color = "${text}"
+            background.corner_radius = "${radius}"
+            """
+        let main = """
+            include = "themes/glass.toml"
+            [vars]
+            radius = 12
+            [[item]]
+            name = "a"
+            position = "left"
+            """
+        let read = { (path: String) in path == "/config/themes/glass.toml" ? theme : nil }
+        let dark = try ConfigFile.plan(main, environment: ["CONFIG_DIR": "/config"], read: read).get()
+        XCTAssertTrue(dark.usesAppearance)
+        XCTAssertEqual(dark.steps.first?.arguments, ["--default", "label.color=0xffffffff", "background.corner_radius=12"]) // the file's var wins
+        let light = try ConfigFile.plan(main, environment: ["CONFIG_DIR": "/config", "APPEARANCE": "light"], read: read).get()
+        XCTAssertEqual(light.steps.first?.arguments, ["--default", "label.color=0xff000000", "background.corner_radius=12"])
+        XCTAssertEqual(light.steps.last?.source, "item 'a'") // the theme's parts first, then the file's
+        switch ConfigFile.plan("include = \"missing.toml\"", environment: ["CONFIG_DIR": "/config"], read: read) {
+            case .success: XCTFail("a missing include")
+            case .failure(let error): XCTAssertTrue(error.message.contains("cannot read /config/missing.toml"), error.message)
+        }
+        XCTAssertFalse(try ConfigFile.plan("[[item]]\nname = \"a\"\nposition = \"left\"").get().usesAppearance)
+    }
+
+    /// The files shipped in examples/ and themes/ load without an error.
+    func testShippedConfigs() throws {
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let read = { (path: String) in try? String(contentsOfFile: path, encoding: .utf8) }
+        for name in ["skylandbar.toml", "liquid-glass.toml"] {
+            let text = try String(contentsOf: repository.appendingPathComponent("examples/\(name)"), encoding: .utf8)
+            for appearance in ["dark", "light"] {
+                let plan = try ConfigFile.plan(text, environment: ["CONFIG_DIR": repository.path, "APPEARANCE": appearance], read: read).get()
+                let model = BarModel()
+                for step in plan.steps {
+                    let outcome = send(model, step.arguments)
+                    XCTAssertFalse(outcome.failed, "\(name) \(step.source): \(outcome.errors)")
+                }
+                XCTAssertFalse(model.items.isEmpty, name)
+            }
+        }
+    }
+}

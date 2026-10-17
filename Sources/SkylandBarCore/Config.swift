@@ -43,6 +43,8 @@ public struct ConfigPlan: Equatable {
     public var steps: [ConfigStep] = []
     /// shell commands to run once it is loaded
     public var exec: [String] = []
+    /// it has [vars.dark] or [vars.light]: load it again when the appearance changes
+    public var usesAppearance = false
 }
 
 public struct ConfigError: Error, Equatable, CustomStringConvertible {
@@ -51,61 +53,99 @@ public struct ConfigError: Error, Equatable, CustomStringConvertible {
 }
 
 public enum ConfigFile {
-    public static let sections = ["vars", "bar", "defaults", "event", "item", "hotload", "exec"]
+    public static let sections = ["include", "vars", "bar", "defaults", "event", "item", "hotload", "exec"]
     public static let types = ["item", "space", "alias", "graph", "slider", "bracket", "workspaces", "title", "notch"]
 
-    public static func plan(_ text: String, environment: [String: String] = [:]) -> Result<ConfigPlan, ConfigError> {
+    /// The commands of a file and of the files it includes (`include = "theme.toml"`, before
+    /// any section; relative to CONFIG_DIR, `~` for HOME): theirs first, so the file can
+    /// change what they set. `read` gives a file's text. Vars come from all of them (the
+    /// file's win), then `[vars.dark]` or `[vars.light]` after APPEARANCE (dark when unset).
+    public static func plan(_ text: String, environment: [String: String] = [:],
+                            read: (String) -> String? = { _ in nil }) -> Result<ConfigPlan, ConfigError>
+    {
         let root: TOMLTable
-        switch TOML.parse(text) {
+        switch table(text, "") {
             case .success(let table): root = table
-            case .failure(let error): return .failure(ConfigError(message: error.description))
+            case .failure(let error): return .failure(error)
         }
-        if let unknown = root.keys.first(where: { !sections.contains($0) }) {
-            return .failure(ConfigError(message: "unknown section '\(unknown)' (\(sections.joined(separator: ", ")))"))
+        var roots: [TOMLTable] = []
+        for path in strings(root["include"]) {
+            var full = path.hasPrefix("~/") ? (environment["HOME"] ?? "~") + path.dropFirst(1) : path
+            if !full.hasPrefix("/"), let dir = environment["CONFIG_DIR"] { full = "\(dir)/\(full)" }
+            guard let included = read(full) else { return .failure(ConfigError(message: "include '\(path)': cannot read \(full)")) }
+            switch table(included, "\(path): ") {
+                case .success(let table):
+                    if table["include"] != nil { return .failure(ConfigError(message: "\(path): an included file cannot include others")) }
+                    roots.append(table)
+                case .failure(let error): return .failure(error)
+            }
         }
+        roots.append(root)
+
+        var plan = ConfigPlan()
         var vars: [String: String] = [:]
-        if case .table(let table)? = root["vars"] {
-            for (key, value) in table.entries { vars[key] = scalar(value, key: key) }
+        let appearance = environment["APPEARANCE"] ?? "dark"
+        for scope in ["", appearance] {
+            for file in roots {
+                guard case .table(var table)? = file["vars"] else { continue }
+                if !scope.isEmpty {
+                    guard case .table(let variant)? = table[scope] else { continue }
+                    table = variant
+                }
+                for (key, value) in table.entries {
+                    if case .table = value {
+                        if key == "dark" || key == "light" { plan.usesAppearance = true }
+                        continue
+                    }
+                    vars[key] = scalar(value, key: key)
+                }
+            }
         }
         let fill = { (text: String) in substitute(text, vars, environment) }
-        var plan = ConfigPlan()
 
-        for (section, command) in [("bar", "--bar"), ("defaults", "--default")] {
-            guard let value = root[section] else { continue }
-            guard case .table(let table) = value else { return .failure(ConfigError(message: "[\(section)] must be a table")) }
-            let props = properties(table, fill)
-            if !props.isEmpty { plan.steps.append(ConfigStep(source: "[\(section)]", arguments: [command] + props)) }
-        }
-
-        switch tables(root["event"], "event") {
-            case .failure(let error): return .failure(error)
-            case .success(let events):
-                for event in events {
-                    guard case .string(let name)? = event["name"] else { return .failure(ConfigError(message: "[[event]] needs a name")) }
-                    var arguments = ["--add", "event", fill(name)]
-                    if case .string(let notification)? = event["notification"] { arguments.append(fill(notification)) }
-                    plan.steps.append(ConfigStep(source: "event '\(name)'", arguments: arguments))
-                }
-        }
-
-        switch tables(root["item"], "item") {
-            case .failure(let error): return .failure(error)
-            case .success(let items):
-                for (offset, item) in items.enumerated() {
-                    switch step(item, number: offset + 1, fill) {
-                        case .success(let step): plan.steps.append(step)
-                        case .failure(let error): return .failure(error)
+        for file in roots {
+            for (section, command) in [("bar", "--bar"), ("defaults", "--default")] {
+                guard let value = file[section] else { continue }
+                guard case .table(let table) = value else { return .failure(ConfigError(message: "[\(section)] must be a table")) }
+                let props = properties(table, fill)
+                if !props.isEmpty { plan.steps.append(ConfigStep(source: "[\(section)]", arguments: [command] + props)) }
+            }
+            switch tables(file["event"], "event") {
+                case .failure(let error): return .failure(error)
+                case .success(let events):
+                    for event in events {
+                        guard case .string(let name)? = event["name"] else { return .failure(ConfigError(message: "[[event]] needs a name")) }
+                        var arguments = ["--add", "event", fill(name)]
+                        if case .string(let notification)? = event["notification"] { arguments.append(fill(notification)) }
+                        plan.steps.append(ConfigStep(source: "event '\(name)'", arguments: arguments))
                     }
-                }
+            }
+            switch tables(file["item"], "item") {
+                case .failure(let error): return .failure(error)
+                case .success(let items):
+                    for (offset, item) in items.enumerated() {
+                        switch step(item, number: offset + 1, fill) {
+                            case .success(let step): plan.steps.append(step)
+                            case .failure(let error): return .failure(error)
+                        }
+                    }
+            }
+            plan.exec += strings(file["exec"]).map(fill)
         }
-
         if case .bool(true)? = root["hotload"] { plan.steps.append(ConfigStep(source: "hotload", arguments: ["--hotload", "on"])) }
-        switch root["exec"] {
-            case .string(let command)?: plan.exec = [fill(command)]
-            case .array(let commands)?: plan.exec = commands.compactMap { if case .string(let c) = $0 { return fill(c) } else { return nil } }
-            default: break
-        }
         return .success(plan)
+    }
+
+    /// A file's TOML, with its sections checked.
+    private static func table(_ text: String, _ origin: String) -> Result<TOMLTable, ConfigError> {
+        switch TOML.parse(text) {
+            case .failure(let error): return .failure(ConfigError(message: origin + error.description))
+            case .success(let root):
+                if let unknown = root.keys.first(where: { !sections.contains($0) }) {
+                    return .failure(ConfigError(message: "\(origin)unknown section '\(unknown)' (\(sections.joined(separator: ", ")))"))
+                }
+                return .success(root)
+        }
     }
 
     /// An [[item]]: --add, its properties, its subscriptions, in one message.
@@ -242,7 +282,7 @@ public enum ConfigExport {
             for (option, value) in item.options.sorted(by: { $0.key < $1.key }) where option != "open" {
                 props.append((key: "\(item.kind).\(option)", value: value))
             }
-            for state in workspaceStates {
+            for state in workspaceStates + ["hover"] {
                 for prop in item.states[state] ?? [] { props.append((key: "\(state).\(prop.key)", value: prop.value)) }
             }
             out += props.map(line).joined()

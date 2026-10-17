@@ -81,6 +81,8 @@ public struct BackgroundProps: Equatable {
     public var borderColor = ARGB.clear
     public var borderWidth = 0.0
     public var height = 0.0 // 0: the bar's height
+    /// `concentric` (-1): its container's radius less the gap between them (Apple's concentric
+    /// corners); on a glass background, 0 is a capsule (Liquid Glass's default shape)
     public var cornerRadius = 0.0
     public var paddingLeft = 0.0
     public var paddingRight = 0.0
@@ -103,7 +105,12 @@ public struct BackgroundProps: Equatable {
             case "border_color": return enable(Value.setColor(&borderColor, value, part: rest))
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
             case "height": return Value.setNumber(&height, value, minimum: 0)
-            case "corner_radius": return Value.setNumber(&cornerRadius, value, minimum: 0)
+            case "corner_radius":
+                if value == "concentric" {
+                    cornerRadius = -1
+                    return nil
+                }
+                return Value.setNumber(&cornerRadius, value, minimum: 0)
             case "padding_left": return Value.setNumber(&paddingLeft, value)
             case "padding_right": return Value.setNumber(&paddingRight, value)
             case "x_offset": return Value.setNumber(&xOffset, value)
@@ -129,7 +136,7 @@ public struct BackgroundProps: Equatable {
     public var json: [String: Any] {
         [
             "drawing": drawing ? "on" : "off", "color": color.description, "border_color": borderColor.description,
-            "border_width": borderWidth, "height": height, "corner_radius": cornerRadius,
+            "border_width": borderWidth, "height": height, "corner_radius": cornerRadius < 0 ? "concentric" as Any : cornerRadius,
             "padding_left": paddingLeft, "padding_right": paddingRight, "x_offset": xOffset, "y_offset": yOffset,
             "clip": clip, "image": image.json, "shadow": shadow.json, "glass": glass,
         ]
@@ -538,6 +545,9 @@ public struct BarProps: Equatable {
     public var shadow = false
     /// skylandbar: Liquid Glass (macOS 26) tinted with `color`: off | regular | clear
     public var glass = "off"
+    /// how close glass backgrounds get before they merge into one shape
+    /// (NSGlassEffectContainerView's spacing); 0: they never merge
+    public var glassSpacing = 0.0
 
     public init() {}
 
@@ -547,6 +557,7 @@ public struct BarProps: Equatable {
             case "color": return Value.setColor(&color, value, part: rest)
             case "border_color": return Value.setColor(&borderColor, value, part: rest)
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
+            case "glass_spacing": return Value.setNumber(&glassSpacing, value, minimum: 0)
             case "position": return Value.oneOf(&position, value, ["top", "bottom"])
             case "height": return Value.setNumber(&height, value, minimum: 0)
             case "notch_display_height": return Value.setNumber(&notchDisplayHeight, value, minimum: 0)
@@ -606,7 +617,7 @@ public struct BarProps: Equatable {
             "margin": margin, "notch_display_height": notchDisplayHeight, "notch_width": notchWidth, "notch_offset": notchOffset,
             "display": display, "color": color.description, "border_color": borderColor.description, "border_width": borderWidth,
             "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
-            "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass,
+            "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass, "glass_spacing": glassSpacing,
         ]
     }
 }

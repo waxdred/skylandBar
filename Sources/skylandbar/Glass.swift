@@ -16,6 +16,35 @@ enum Glass {
         return view
     }
 
+    /// The parent of a window's item glass views: on macOS 26 an NSGlassEffectContainerView,
+    /// which renders them together (fewer passes) and merges the ones closer than its
+    /// spacing, as Apple asks for groups of glass; a plain view before. (container, holder):
+    /// the glass views go in the holder, the container in the window.
+    static func makeContainer() -> (container: NSView, holder: NSView) {
+        let holder = FlippedHolder()
+        holder.autoresizingMask = [.width, .height]
+        #if compiler(>=6.2)
+            if #available(macOS 26.0, *) {
+                let container = NSGlassEffectContainerView()
+                holder.frame = container.bounds
+                container.contentView = holder
+                return (container, holder)
+            }
+        #endif
+        return (holder, holder)
+    }
+
+    /// The merging distance of the container a holder is in.
+    static func setSpacing(_ holder: NSView, _ spacing: Double) {
+        #if compiler(>=6.2)
+            if #available(macOS 26.0, *), let container = holder.superview as? NSGlassEffectContainerView,
+               container.spacing != spacing
+            {
+                container.spacing = spacing
+            }
+        #endif
+    }
+
     /// `style`: regular | clear; `tint`: the background's color.
     static func update(_ view: NSView, style: String, tint: ARGB, cornerRadius: Double) {
         #if compiler(>=6.2)
@@ -30,4 +59,9 @@ enum Glass {
         view.layer?.masksToBounds = true
         view.layer?.backgroundColor = Fonts.color(tint).cgColor
     }
+}
+
+/// Glass views are placed in the bar view's flipped coordinates.
+private final class FlippedHolder: NSView {
+    override var isFlipped: Bool { true }
 }

@@ -62,7 +62,7 @@ public let builtinEvents = [
     "front_app_switched", "space_change", "space_windows_change", "display_change", "volume_change",
     "brightness_change", "power_source_change", "wifi_change", "media_change", "system_will_sleep", "system_woke",
     "mouse.entered", "mouse.exited", "mouse.entered.global", "mouse.exited.global", "mouse.clicked",
-    "mouse.scrolled", "mouse.scrolled.global", "forced", "routine", "notch_open", "notch_close",
+    "mouse.scrolled", "mouse.scrolled.global", "forced", "routine", "notch_open", "notch_close", "appearance_change",
 ] + skylandEvents
 
 /// The events skylandbar sends from skyland's (or AeroSpace's) `subscribe`, with their
@@ -128,6 +128,8 @@ public final class BarModel {
     public var currentSpaces: [Int: Int] = [:]
     /// seconds, for animations; tests set their own
     public var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
+    /// the Reduce Motion setting (set by the app): animations end where they go, at once
+    public var reduceMotion = false
 
     /// skyland's workspaces and focused window, for the components (set by the app)
     public private(set) var workspaces: [WorkspaceInfo] = []
@@ -149,6 +151,7 @@ public final class BarModel {
         frames = [:]
         itemTransitions = [:]
         barTransition = nil
+        hovered = nil
     }
 
     public func item(named name: String) -> BarItem? { items.first { $0.name == name } }
@@ -188,10 +191,35 @@ public final class BarModel {
     public var isAnimating: Bool { !itemTransitions.isEmpty || barTransition != nil }
     public var isBarAnimating: Bool { barTransition != nil }
 
-    /// The item as drawn now: on its way to its properties while it is animated.
+    /// The item under the mouse (set by the app): its `hover.*` properties apply.
+    public private(set) var hovered: String?
+
+    /// What the item shows once its animations end: its properties, and its `hover.*` ones
+    /// while the mouse is over it.
+    public func target(_ item: BarItem) -> ItemProps {
+        guard hovered == item.name, let hover = item.states["hover"], !hover.isEmpty else { return item.props }
+        var props = item.props
+        for prop in hover { _ = props.apply(prop.key, prop.value) }
+        return props
+    }
+
+    /// The item as drawn now: on its way to its target while it is animated.
     public func displayed(_ item: BarItem) -> ItemProps {
-        guard let transition = itemTransitions[item.name] else { return item.props }
-        return .blend(transition.from, item.props, transition.progress(at: clock()))
+        let goal = target(item)
+        guard let transition = itemTransitions[item.name] else { return goal }
+        return .blend(transition.from, goal, transition.progress(at: clock()))
+    }
+
+    /// The mouse went over another item (nil: none): the items with `hover.*` properties
+    /// move to their new look in 9 frames (0.15 s). True when something animates.
+    @discardableResult
+    public func setHovered(_ name: String?) -> Bool {
+        guard name != hovered else { return false }
+        let changing = [hovered, name].compactMap { $0 }.compactMap { item(named: $0) }.filter { $0.states["hover"]?.isEmpty == false }
+        let before = changing.map { displayed($0) }
+        hovered = name
+        for (item, from) in zip(changing, before) { itemTransitions[item.name] = transition(from: from, (.sin, 9)) }
+        return !changing.isEmpty
     }
 
     /// The bar as drawn now.
@@ -208,7 +236,7 @@ public final class BarModel {
     }
 
     private func transition<Props>(from: Props, _ animation: (curve: Curve, frames: Double)) -> Transition<Props> {
-        Transition(from: from, start: clock(), duration: animation.frames / framesPerSecond, curve: animation.curve)
+        Transition(from: from, start: clock(), duration: reduceMotion ? 0 : animation.frames / framesPerSecond, curve: animation.curve)
     }
 
     private func execute(_ command: Command, _ o: inout Outcome) {
@@ -377,6 +405,15 @@ public final class BarModel {
     private func setComponent(_ index: Int, _ prop: Prop) -> String?? {
         let kind = items[index].kind
         let (head, rest) = splitKey(prop.key)
+        if head == "hover", let rest { // any item: its look under the mouse
+            var scratch = ItemProps()
+            if let error = scratch.apply(rest, prop.value) { return .some(error) }
+            var props = items[index].states["hover"] ?? []
+            props.removeAll { $0.key == rest }
+            props.append(Prop(rest, prop.value))
+            items[index].states["hover"] = props
+            return .some(nil)
+        }
         guard (kind == "workspaces" && (head == "workspaces" || workspaceStates.contains(head))) || (kind == "title" && head == "title")
             || (kind == "notch" && head == "notch"),
               let rest else { return nil }
@@ -466,7 +503,7 @@ public final class BarModel {
             let frames = component.options["animation_frames"].flatMap(Double.init) ?? 15
             let children = workspaces.map { workspaceItem(component, $0) }
             for child in children {
-                if let curve, let old = before[child.name], old != child.props {
+                if let curve, let old = before[child.name], old != target(child) {
                     itemTransitions[child.name] = transition(from: old, (curve, frames))
                     animated = true
                 }
@@ -492,6 +529,7 @@ public final class BarModel {
                            subscriptions: component.subscriptions)
         item.parent = component.name
         item.workspace = workspace.name
+        if let hover = component.states["hover"] { item.states["hover"] = hover }
         return item
     }
 

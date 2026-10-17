@@ -35,6 +35,8 @@ final class BarApp {
     private var skylandAsking = false
     private var skylandAskAgain = false
     private var lastWorkspaceScroll = 0.0
+    /// the TOML config has [vars.dark] / [vars.light]: it loads again when the appearance changes
+    private var configUsesAppearance = false
     /// the notch: its window, how open it is (0...1, animated), the hover's pending open or close
     private var notchWindow: BarWindow?
     private var notchProgress = 0.0
@@ -100,6 +102,7 @@ final class BarApp {
         }
         model.currentSpaces = Spaces.current()
         focusedDisplay = Windows.focusedDisplay()
+        watchAccessibilityAndAppearance()
         rebuildWindows()
         runConfig()
     }
@@ -146,6 +149,40 @@ final class BarApp {
         if outcome.notchChanged { notchChanged() }
         if outcome.redraw || outcome.barChanged { setNeedsLayout() }
         scripts.run(outcome.scripts)
+    }
+
+    // MARK: appearance and accessibility
+
+    /// "dark" or "light", as the system shows now.
+    private static var appearance: String {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? "dark" : "light"
+    }
+
+    /// Reduce Motion ends animations at once (Liquid Glass's own effects follow Reduce
+    /// Transparency and Increase Contrast by themselves). A change of appearance is the
+    /// appearance_change event (INFO dark or light, APPEARANCE in scripts), and loads a TOML
+    /// config with [vars.dark] / [vars.light] again.
+    private func watchAccessibilityAndAppearance() {
+        model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        scripts.appearance = Self.appearance
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                                          object: nil, queue: .main)
+        { [unowned self] _ in
+            self.model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            self.setNeedsLayout()
+        }
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+                                                            object: nil, queue: .main)
+        { [unowned self] _ in
+            // the setting is written just after the notification
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                let appearance = Self.appearance
+                guard appearance != self.scripts.appearance else { return }
+                self.scripts.appearance = appearance
+                self.scripts.run(self.model.scripts(for: "appearance_change", info: appearance))
+                if self.configUsesAppearance { self.reload(nil) }
+            }
+        }
     }
 
     // MARK: skyland components
@@ -287,10 +324,12 @@ final class BarApp {
     private func load(_ file: String) {
         let say = { (text: String) in FileHandle.standardError.write(Data("skylandbar: \(file): \(text)\n".utf8)) }
         guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return say("cannot read it") }
-        switch ConfigFile.plan(text, environment: scripts.environment) {
+        let read = { (path: String) in try? String(contentsOfFile: path, encoding: .utf8) }
+        switch ConfigFile.plan(text, environment: scripts.environment, read: read) {
             case .failure(let error):
                 say(error.message)
             case .success(let plan):
+                configUsesAppearance = plan.usesAppearance
                 for step in plan.steps {
                     let answer = handle(step.arguments)
                     let problems = answer.text.split(separator: "\n").filter { $0.hasPrefix("[") }
@@ -447,8 +486,14 @@ final class BarApp {
     private func makeWindow(_ display: Int) -> BarWindow {
         let window = BarWindow(display: display)
         let view = window.view, id = ObjectIdentifier(window)
-        view.onItemEntered = { [unowned self] name in self.scripts.run(self.model.scripts(for: "mouse.entered", only: name)) }
-        view.onItemExited = { [unowned self] name in self.scripts.run(self.model.scripts(for: "mouse.exited", only: name)) }
+        view.onItemEntered = { [unowned self] name in
+            if self.model.setHovered(name) { self.startFrames() }
+            self.scripts.run(self.model.scripts(for: "mouse.entered", only: name))
+        }
+        view.onItemExited = { [unowned self] name in
+            if self.model.hovered == name, self.model.setHovered(nil) { self.startFrames() }
+            self.scripts.run(self.model.scripts(for: "mouse.exited", only: name))
+        }
         // global: entering the first of the bar's windows, leaving the last one (going
         // from the bar to its popup is neither)
         view.onBarEntered = { [unowned self] in
@@ -644,7 +689,8 @@ final class BarApp {
             notchOpen = open
             let frames = notch.options["animation_frames"].flatMap(Double.init) ?? 20
             let curve = notch.options["animation"].flatMap(Curve.init(rawValue:)) ?? .tanh
-            notchMove = (notchProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime, frames / framesPerSecond, curve)
+            let duration = model.reduceMotion ? 0 : frames / framesPerSecond // Reduce Motion: at once
+            notchMove = (notchProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime, duration, curve)
             scripts.run(model.scripts(for: open ? "notch_open" : "notch_close"))
             if notchTicker == nil {
                 notchTicker = FrameTicker(view: notchWindow?.view) { [unowned self] in self.notchFrame() }

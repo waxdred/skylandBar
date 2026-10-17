@@ -141,6 +141,8 @@ struct PanelStyle: Equatable {
     /// small outward curves (`flare`) where it meets the top edge
     var notch = false
     var flare = 0.0
+    /// how close its glass backgrounds merge (the bar's glass_spacing)
+    var glassSpacing = 0.0
 
     init() {}
 
@@ -151,6 +153,7 @@ struct PanelStyle: Equatable {
         cornerRadius = bar.cornerRadius
         glass = bar.glass
         fontSmoothing = bar.fontSmoothing
+        glassSpacing = bar.glassSpacing
     }
 
     init(popup: PopupProps, fontSmoothing: Bool) {
@@ -161,7 +164,7 @@ struct PanelStyle: Equatable {
             borderWidth = background.borderWidth
             glass = background.glass
         }
-        cornerRadius = background.cornerRadius
+        cornerRadius = max(0, background.cornerRadius) // its own: concentric to nothing
         self.fontSmoothing = fontSmoothing
     }
 }
@@ -308,10 +311,22 @@ final class BarView: NSView {
             .insetBy(dx: inset, dy: inset)
     }
 
+    /// A background's corners: `concentric`, its window's radius less the gap between them
+    /// (Apple's concentric shapes); 0 on glass, a capsule (Liquid Glass's default shape).
+    func radius(_ background: BackgroundProps, _ rect: NSRect) -> Double {
+        var radius = background.cornerRadius
+        if radius < 0 {
+            radius = max(0, style.cornerRadius - min(rect.minY - bounds.minY, rect.minX - bounds.minX, bounds.maxY - rect.maxY))
+        } else if radius == 0 && background.glass != "off" {
+            radius = rect.height / 2
+        }
+        return min(radius, rect.height / 2, rect.width / 2)
+    }
+
     private func fill(_ background: BackgroundProps, x: Double, width: Double, mid: Double, row: Double) {
         let rect = backgroundRect(background, x: x, width: width, mid: mid, row: row)
         guard rect.width > 0, rect.height > 0 else { return }
-        let radius = min(background.cornerRadius, rect.height / 2, rect.width / 2)
+        let radius = radius(background, rect)
         let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         if background.glass == "off" {
             NSGraphicsContext.saveGraphicsState()
@@ -370,7 +385,7 @@ final class BarView: NSView {
         NSGraphicsContext.saveGraphicsState()
         context.compositingOperation = .destinationOut
         for (rect, background) in clipped {
-            let radius = min(background.cornerRadius, rect.height / 2, rect.width / 2)
+            let radius = radius(background, rect)
             NSColor(white: 0, alpha: background.glass != "off" ? 1 : min(1, background.clip)).setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
         }
@@ -409,7 +424,7 @@ final class BarView: NSView {
         let rect = backgroundRect(track, x: x, width: slider.width, mid: mid, row: item.height)
         let filled = NSRect(x: rect.minX, y: rect.minY, width: rect.width * slider.percentage / 100, height: rect.height)
         if filled.width > 0 {
-            let radius = min(track.cornerRadius, filled.height / 2, filled.width / 2)
+            let radius = min(radius(track, rect), filled.height / 2, filled.width / 2)
             Fonts.color(slider.highlightColor).setFill()
             NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius).fill()
         }
@@ -532,6 +547,9 @@ final class BarWindow {
     private let root = FlippedView()
     private var panelGlass: NSView?
     private var itemGlass: [NSView] = []
+    /// the item glass views' parent: an NSGlassEffectContainerView's content (macOS 26),
+    /// which renders them in one pass and merges those closer than its spacing
+    private var glassHolder: NSView?
 
     init(display: Int) {
         self.display = display
@@ -618,16 +636,24 @@ final class BarWindow {
             panelGlass = nil
         }
         let backgrounds = view.glassBackgrounds()
+        if glassHolder == nil && !backgrounds.isEmpty {
+            let (container, holder) = Glass.makeContainer()
+            container.frame = root.bounds
+            container.autoresizingMask = [.width, .height]
+            root.addSubview(container, positioned: .below, relativeTo: view)
+            glassHolder = holder
+        }
+        if let glassHolder { Glass.setSpacing(glassHolder, style.glassSpacing) }
         while itemGlass.count > backgrounds.count { itemGlass.removeLast().removeFromSuperview() }
         while itemGlass.count < backgrounds.count {
             let glass = Glass.makeView()
-            root.addSubview(glass, positioned: .below, relativeTo: view)
+            glassHolder?.addSubview(glass)
             itemGlass.append(glass)
         }
         for (glass, background) in zip(itemGlass, backgrounds) {
             glass.frame = background.rect
             Glass.update(glass, style: background.background.glass, tint: background.background.color,
-                         cornerRadius: min(background.background.cornerRadius, background.rect.height / 2))
+                         cornerRadius: view.radius(background.background, background.rect))
         }
     }
 }
