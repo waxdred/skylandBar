@@ -33,17 +33,35 @@ skylandbar --query bar
 | --- | --- |
 | Commands | `--bar`, `--add item/event/bracket/graph/slider/alias/space`, `--set` (name or `/regex/`), `--default`, `--subscribe`, `--trigger` (with `VAR=value`), `--remove`, `--move before/after`, `--reorder`, `--rename`, `--clone`, `--push`, `--animate`, `--query bar/defaults/events/displays/default_menu_items/<item>`, `--update`, `--reload [file]`, `--hotload on/off`, `--exit` |
 | Bar | `position` top/bottom, `height`, `notch_display_height`, `margin`, `y_offset`, `color`, `border_color/width`, `corner_radius`, `blur_radius`, `padding_left/right`, `notch_width`, `notch_offset`, `display` (all/main/list), `hidden` (on/off/current/toggle), `topmost` (on/window/off), `sticky`, `shadow`, `font_smoothing` |
-| Items | `position` left/right/center/q/e/`popup.<item>`, `drawing`, `width` (dynamic or fixed), `y_offset`, `display` (active/list), `space` (Mission Control spaces), `ignore_association`, `updates` (on/off/when_shown), `update_freq`, `script`, `click_script`, `scroll_texts`, `background.*` |
+| Items | `position` left/right/center/q/e/`popup.<item>`, `drawing`, `width` (dynamic or fixed), `y_offset`, `display` (active: the focused window's display, or a list), `space` (Mission Control spaces), `ignore_association`, `updates` (on/off/when_shown), `update_freq`, `script`, `click_script`, `scroll_texts`, `background.*` |
 | Text | `icon` and `label`: string, `font` (`Family:Style:Size`), `color` (+ `.alpha`), `highlight`, `highlight_color`, `padding_left/right`, `y_offset`, `width`, `align`, `max_chars`, `scroll_duration`, `drawing`, `background.*`, `shadow.*` |
-| Backgrounds | `color`, `border_color/width`, `height`, `corner_radius`, `padding_left/right`, `x_offset`, `y_offset`, `shadow.*`, `image` (a file, `app.<bundle id or name>`, `media.artwork`) with `image.scale/corner_radius/border_*/padding_*/y_offset/shadow`. Like sketchybar, setting a color, a border or an image draws the background |
+| Backgrounds | `color`, `border_color/width`, `height`, `corner_radius`, `padding_left/right`, `x_offset`, `y_offset`, `clip`, `shadow.*`, `image` (a file, `app.<bundle id or name>`, `media.artwork`) with `image.scale/corner_radius/border_*/padding_*/y_offset/shadow`. Like sketchybar, setting a color, a border or an image draws the background |
 | Popups | `popup.drawing` (+ toggle), `horizontal`, `align`, `height`, `y_offset`, `topmost`, `blur_radius`, `background.*`; popups of popup items |
 | Components | brackets (`--add bracket <name> <member or /regex/>...`), graphs (`--push`, `graph.color/fill_color/line_width`), sliders (`slider.percentage/width/highlight_color/background.*/knob.*`, dragging sends `mouse.clicked` with `PERCENTAGE`), aliases (`alias.color/scale/update_freq`, clicks go to the real menu bar item), spaces (`SELECTED`, `SID`, `DID`) |
 | Animations | `--animate <curve> <frames>` then `--set`/`--bar`: numbers and colors move along linear, quadratic, tanh, sin, exp or circ at 60 frames a second |
 | Scripts | `NAME`, `SENDER`, `INFO`, `BUTTON`, `MODIFIER`, `SCROLL_DELTA`, `PERCENTAGE`, `SELECTED`, `SID`, `DID`, `CONFIG_DIR`, `BAR_NAME`, plus the variables given to `--trigger`. They stop when the bar quits |
-| Events | `front_app_switched`, `space_change`, `display_change`, `system_woke`, `system_will_sleep`, `power_source_change`, `volume_change`, `brightness_change`, `wifi_change`, `media_change`, `mouse.entered/exited(.global)`, `mouse.clicked`, `mouse.scrolled(.global)`, `routine`, `forced`, custom events (with an optional distributed notification) |
+| Events | `front_app_switched`, `space_change`, `space_windows_change`, `display_change`, `system_woke`, `system_will_sleep`, `power_source_change`, `volume_change`, `brightness_change`, `wifi_change`, `media_change`, `mouse.entered/exited(.global)`, `mouse.clicked`, `mouse.scrolled(.global)`, `routine`, `forced`, custom events (with an optional distributed notification) |
 | Query | JSON close to SketchyBar's, with `bounding_rects` per display |
 
 ## skylandbar extras
+
+- **skyland and AeroSpace events, built in**: skylandbar subscribes to skyland's socket (or
+  AeroSpace's) and sends these events as they happen, with nothing in the window manager's config:
+
+  | Event | Variables |
+  | --- | --- |
+  | `skyland_workspace_change`, `aerospace_workspace_change` | `FOCUSED_WORKSPACE`, `PREV_WORKSPACE` |
+  | `skyland_focus_change` | `FOCUSED_WORKSPACE`, `WINDOW_ID` |
+  | `skyland_monitor_change` | `FOCUSED_WORKSPACE`, `MONITOR` |
+  | `skyland_mode_change`, `aerospace_mode_change` | `MODE` |
+  | `skyland_window_detected` | `WINDOW_ID`, `WORKSPACE`, `APP_NAME`, `APP_BUNDLE_ID` |
+  | `skyland_binding` | `MODE`, `BINDING` |
+
+  `INFO` is the event's JSON. Configs written for AeroSpace and sketchybar that use
+  `aerospace_workspace_change` work as they are. If the window manager's config also
+  triggers it (`exec-on-workspace-change`), remove that line.
+- skyland pushes its workspaces and window title to skylandbar while it runs, and to
+  sketchybar otherwise.
 
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes
@@ -61,10 +79,9 @@ skylandbar --query bar
 - **space_change**: Mission Control spaces. Workspaces from skyland or AeroSpace come through your
   own events (`--add event` + `--trigger`), as with SketchyBar.
 
-## Next
+## Manual tests
 
-- `space_windows_change`, `display=active` following the focused window rather than the mouse
-- skyland integration: workspaces and focus pushed by skyland instead of `aerospace` calls in scripts
+`manual-tests/` holds one script per area, with what to check: see its README.
 
 ## Not supported
 

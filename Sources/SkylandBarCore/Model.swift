@@ -46,7 +46,51 @@ public let builtinEvents = [
     "brightness_change", "power_source_change", "wifi_change", "media_change", "system_will_sleep", "system_woke",
     "mouse.entered", "mouse.exited", "mouse.entered.global", "mouse.exited.global", "mouse.clicked",
     "mouse.scrolled", "mouse.scrolled.global", "forced", "routine",
+] + skylandEvents
+
+/// The events skylandbar sends from skyland's (or AeroSpace's) `subscribe`, with their
+/// variables. The aerospace_ names are the ones sketchybar configs for AeroSpace already use
+/// (`exec-on-workspace-change`), so they work without it.
+public let skylandEvents = [
+    "skyland_workspace_change", // FOCUSED_WORKSPACE, PREV_WORKSPACE
+    "aerospace_workspace_change", // the same
+    "skyland_focus_change", // FOCUSED_WORKSPACE, WINDOW_ID
+    "skyland_monitor_change", // FOCUSED_WORKSPACE, MONITOR
+    "skyland_mode_change", // MODE
+    "aerospace_mode_change", // the same
+    "skyland_window_detected", // WINDOW_ID, WORKSPACE, APP_NAME, APP_BUNDLE_ID
+    "skyland_binding", // MODE, BINDING
 ]
+
+/// skyland's `subscribe` event (its JSON) as the bar's events and their variables.
+public func skylandEvent(_ json: [String: Any]) -> [(event: String, env: [String: String])] {
+    func text(_ key: String) -> String {
+        switch json[key] {
+            case let string as String: return string
+            case let number as NSNumber: return number.stringValue
+            default: return ""
+        }
+    }
+    switch json["_event"] as? String {
+        case "focused-workspace-changed"?:
+            let env = ["FOCUSED_WORKSPACE": text("workspace"), "PREV_WORKSPACE": text("prevWorkspace")]
+            return [("skyland_workspace_change", env), ("aerospace_workspace_change", env)]
+        case "focus-changed"?:
+            return [("skyland_focus_change", ["FOCUSED_WORKSPACE": text("workspace"), "WINDOW_ID": text("windowId")])]
+        case "focused-monitor-changed"?:
+            return [("skyland_monitor_change", ["FOCUSED_WORKSPACE": text("workspace"), "MONITOR": text("monitorId")])]
+        case "mode-changed"?:
+            let env = ["MODE": text("mode")]
+            return [("skyland_mode_change", env), ("aerospace_mode_change", env)]
+        case "window-detected"?:
+            return [("skyland_window_detected", ["WINDOW_ID": text("windowId"), "WORKSPACE": text("workspace"),
+                                                 "APP_NAME": text("appName"), "APP_BUNDLE_ID": text("appBundleId")])]
+        case "binding-triggered"?:
+            return [("skyland_binding", ["MODE": text("mode"), "BINDING": text("binding")])]
+        default:
+            return []
+    }
+}
 
 /// The bar and its items, changed by commands. No AppKit: the app lays it out and draws it.
 public final class BarModel {
@@ -325,6 +369,11 @@ public final class BarModel {
             }
             return ScriptRun(item: item.name, script: item.props.script, env: env)
         }
+    }
+
+    /// Whether an item listens to `event`, so the app looks things up only when needed.
+    public func isSubscribed(to event: String) -> Bool {
+        items.contains { $0.subscriptions.contains(event) && !$0.props.script.isEmpty }
     }
 
     /// The scripts an event runs: `forced` runs every item's script, `routine` the item's

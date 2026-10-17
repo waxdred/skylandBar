@@ -366,3 +366,25 @@ final class AnimationTests: XCTestCase {
         XCTAssertFalse(model.isAnimating)
     }
 }
+
+final class SkylandTests: XCTestCase {
+    func testEvents() {
+        let workspace = skylandEvent(["_event": "focused-workspace-changed", "workspace": "2", "prevWorkspace": "1"])
+        XCTAssertEqual(workspace.map(\.event), ["skyland_workspace_change", "aerospace_workspace_change"])
+        XCTAssertEqual(workspace.first?.env, ["FOCUSED_WORKSPACE": "2", "PREV_WORKSPACE": "1"])
+        let focus = skylandEvent(["_event": "focus-changed", "workspace": "3", "windowId": 42])
+        XCTAssertEqual(focus.first?.env["WINDOW_ID"], "42")
+        XCTAssertEqual(skylandEvent(["_event": "mode-changed", "mode": "resize"]).map(\.env["MODE"]), ["resize", "resize"])
+        XCTAssertEqual(skylandEvent(["_event": "focused-monitor-changed", "workspace": "1", "monitorId": 2]).first?.env["MONITOR"], "2")
+        XCTAssertTrue(skylandEvent(["_event": "something-new"]).isEmpty)
+    }
+
+    func testSubscriptions() {
+        let model = BarModel()
+        _ = send(model, ["--add", "item", "ws", "left", "--set", "ws", "script=ws.sh", "--subscribe", "ws", "aerospace_workspace_change"])
+        XCTAssertTrue(model.isSubscribed(to: "aerospace_workspace_change")) // built in: no --add event needed
+        XCTAssertFalse(model.isSubscribed(to: "space_windows_change"))
+        let runs = model.scripts(for: "aerospace_workspace_change", info: "{}", env: ["FOCUSED_WORKSPACE": "2"])
+        XCTAssertEqual(runs.first?.env["FOCUSED_WORKSPACE"], "2")
+    }
+}

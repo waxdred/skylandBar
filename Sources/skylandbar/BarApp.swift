@@ -9,6 +9,7 @@ final class BarApp {
     private let scripts: ScriptRunner
     private let events = SystemEvents()
     private let aliases = AliasCapture()
+    private let skyland = SkylandEvents()
     private var server: Server!
     private var windows: [BarWindow] = []
     /// open popups, by the item they belong to
@@ -24,6 +25,11 @@ final class BarApp {
     /// the windows (bar and popups) the mouse is in, for mouse.entered/exited.global
     private var mouseIn = Set<ObjectIdentifier>()
     private var lastSlideScript = 0.0
+    /// the display of the focused window (`display=active`), nil: the mouse's
+    private var focusedDisplay: Int?
+    /// space_windows_change: the last INFO sent for each display, and the timer that looks
+    private var spaceWindows: [Int: String] = [:]
+    private var windowsTimer: Timer?
 
     init(configPath: String?) {
         self.configPath = configPath
@@ -38,7 +44,17 @@ final class BarApp {
         }
         events.onEvent = { [unowned self] event, info in
             if event == "space_change" { return self.spaceChanged() }
+            if event == "front_app_switched" { self.focusChanged() }
             self.scripts.run(self.model.scripts(for: event, info: info))
+        }
+        skyland.onEvent = { [unowned self] event, env in
+            if event != "skyland_binding" && event != "skyland_mode_change" && event != "aerospace_mode_change" { self.focusChanged() }
+            self.scripts.run(self.model.scripts(for: event, info: env["INFO"] ?? "", env: env))
+        }
+        skyland.start()
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { [unowned self] _ in self.checkSpaceWindows() }
         }
         events.onArtwork = { [unowned self] image in
             Images.artwork = image
@@ -49,6 +65,7 @@ final class BarApp {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [unowned self] _ in
             self.rebuildWindows()
             self.model.currentSpaces = Spaces.current()
+            self.focusChanged()
             self.scripts.run(self.model.scripts(for: "display_change"))
         }
         for signal in [SIGTERM, SIGINT] {
@@ -59,6 +76,7 @@ final class BarApp {
             signalSources.append(source)
         }
         model.currentSpaces = Spaces.current()
+        focusedDisplay = Windows.focusedDisplay()
         rebuildWindows()
         runConfig()
     }
@@ -95,7 +113,10 @@ final class BarApp {
         if outcome.reload { return reload(outcome.reloadPath) }
         if let on = outcome.hotload { setHotload(on) }
         if outcome.barChanged { configureWindows() }
-        if outcome.eventsChanged { events.observeCustom(model.events) }
+        if outcome.eventsChanged {
+            events.observeCustom(model.events)
+            watchSpaceWindows()
+        }
         if outcome.timersChanged { updateTimers() }
         if outcome.animating { startFrames() }
         if outcome.redraw || outcome.barChanged { setNeedsLayout() }
@@ -104,8 +125,56 @@ final class BarApp {
 
     private func spaceChanged() {
         model.currentSpaces = Spaces.current()
-        setNeedsLayout() // `display=active` and `space=` items follow
+        setNeedsLayout() // `space=` items follow
         scripts.run(model.spaceChange())
+        focusChanged()
+    }
+
+    /// Another window has the focus: `display=active` items and `hidden=current` follow
+    /// its display. Looked up again a moment later, for a window still opening.
+    private func focusChanged(again: Bool = true) {
+        let display = Windows.focusedDisplay()
+        if display != nil && display != focusedDisplay {
+            focusedDisplay = display
+            if model.bar.hidden == "current" { configureWindows() } else { setNeedsLayout() }
+        }
+        checkSpaceWindows()
+        if again { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.focusChanged(again: false) } }
+    }
+
+    // MARK: space_windows_change
+
+    /// While an item listens to it, the windows are looked at every 2 seconds too (closing
+    /// a window says nothing to the bar).
+    private func watchSpaceWindows() {
+        let wanted = model.isSubscribed(to: "space_windows_change")
+        if !wanted {
+            windowsTimer?.invalidate()
+            windowsTimer = nil
+            spaceWindows = [:]
+        } else if windowsTimer == nil {
+            let timer = Timer(timeInterval: 2, repeats: true) { [unowned self] _ in self.checkSpaceWindows() }
+            timer.tolerance = 0.5
+            RunLoop.main.add(timer, forMode: .common)
+            windowsTimer = timer
+            checkSpaceWindows()
+        }
+    }
+
+    /// INFO {"space": N, "apps": {"App": windows}} for each display whose space shows other
+    /// windows than last time.
+    private func checkSpaceWindows() {
+        guard windowsTimer != nil else { return }
+        let apps = Windows.appsByDisplay()
+        for display in NSScreen.screens.indices.map({ $0 + 1 }) {
+            let space = model.currentSpaces[display] ?? display
+            let json: [String: Any] = ["space": space, "apps": apps[display] ?? [:]]
+            guard let data = try? JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]) else { continue }
+            let info = String(decoding: data, as: UTF8.self)
+            if spaceWindows[display] == info { continue }
+            spaceWindows[display] = info
+            scripts.run(model.scripts(for: "space_windows_change", info: info))
+        }
     }
 
     // MARK: config
@@ -180,7 +249,9 @@ final class BarApp {
         for item in model.items where item.props.updateFreq > 0 && !item.props.script.isEmpty && item.props.updates != "off" {
             let name = item.name
             let timer = Timer(timeInterval: item.props.updateFreq, repeats: true) { [unowned self] _ in
-                if self.model.item(named: name)?.props.updates == "when_shown" && self.model.bar.hidden == "on" { return }
+                // when_shown: not while the item or the bar is hidden
+                if let item = self.model.item(named: name), item.props.updates == "when_shown",
+                   !item.props.drawing || self.model.bar.hidden == "on" { return }
                 self.scripts.run(self.model.scripts(for: "routine", only: name))
             }
             timer.tolerance = min(1, item.props.updateFreq / 10)
@@ -237,8 +308,10 @@ final class BarApp {
 
     // MARK: windows and layout
 
-    /// 1-based in NSScreen order (1 = the main display), the one with the mouse.
+    /// 1-based in NSScreen order (1 = the main display): the focused window's, else the
+    /// one with the mouse.
     private var activeDisplay: Int {
+        if let focusedDisplay, focusedDisplay <= NSScreen.screens.count { return focusedDisplay }
         let mouse = NSEvent.mouseLocation
         return (NSScreen.screens.firstIndex { $0.frame.contains(mouse) } ?? 0) + 1
     }

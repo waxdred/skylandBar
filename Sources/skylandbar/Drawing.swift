@@ -185,6 +185,7 @@ final class BarView: NSView {
             path.lineWidth = style.borderWidth
             path.stroke()
         }
+        clipBackgrounds()
         for item in items { draw(item) }
     }
 
@@ -273,11 +274,16 @@ final class BarView: NSView {
 
     /// The backgrounds drawn as Liquid Glass, for the window to put glass views under them.
     func glassBackgrounds() -> [(rect: NSRect, background: BackgroundProps)] {
+        drawnBackgrounds().filter { $0.background.glass != "off" }
+    }
+
+    /// Every background drawn, where it is.
+    private func drawnBackgrounds() -> [(rect: NSRect, background: BackgroundProps)] {
         var result: [(rect: NSRect, background: BackgroundProps)] = []
         for item in items {
             let props = item.props, mid = center(item)
             func add(_ background: BackgroundProps, _ x: Double, _ width: Double) {
-                guard background.drawing, background.glass != "off" else { return }
+                guard background.drawing else { return }
                 result.append((backgroundRect(background, x: x, width: width, mid: mid, row: item.height), background))
             }
             add(props.background, item.x, item.length)
@@ -288,6 +294,21 @@ final class BarView: NSView {
             if props.label.drawing { add(props.label.background, parts.label, props.label.paddingLeft + parts.labelWidth + props.label.paddingRight) }
         }
         return result
+    }
+
+    /// `background.clip` (0...1): how much of the bar under a background is cut out, so
+    /// what is behind the bar shows through it.
+    private func clipBackgrounds() {
+        let clipped = drawnBackgrounds().filter { $0.background.clip > 0 }
+        guard !clipped.isEmpty, let context = NSGraphicsContext.current else { return }
+        NSGraphicsContext.saveGraphicsState()
+        context.compositingOperation = .destinationOut
+        for (rect, background) in clipped {
+            let radius = min(background.cornerRadius, rect.height / 2, rect.width / 2)
+            NSColor(white: 0, alpha: min(1, background.clip)).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: graphs and sliders
