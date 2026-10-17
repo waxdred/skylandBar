@@ -481,6 +481,13 @@ final class WorkspaceComponentTests: XCTestCase {
         XCTAssertEqual(model.item(named: "ws.2")?.props.icon.string, "2")
         XCTAssertFalse(send(model, ["--set", "ws", "workspace.1.nope=1"]).errors.isEmpty)
 
+        // workspaces.max: the first ones only
+        _ = send(model, ["--set", "ws", "workspaces.max=2"])
+        XCTAssertEqual(model.items.map(\.name).filter { $0.hasPrefix("ws.") }, ["ws.1", "ws.2"])
+        _ = send(model, ["--set", "ws", "workspaces.max=0"])
+        XCTAssertEqual(model.items.map(\.name).filter { $0.hasPrefix("ws.") }.count, 3)
+        XCTAssertFalse(send(model, ["--set", "ws", "workspaces.max=-1"]).errors.isEmpty)
+
         // hover: a flat fill; the selected one (a lens) keeps its tint under the mouse
         _ = send(model, ["--set", "ws", "hover.background.color=0x1affffff", "hover.icon.color=0xff00ff00",
                          "focused.background.glass=lens", "focused.background.color=0x260a84ff"])

@@ -434,8 +434,9 @@ public final class BarModel {
               let rest else { return nil }
         if kind == "notch" { return .some(setNotch(index, rest, prop.value)) }
         if head == kind {
-            let allowed = kind == "workspaces" ? ["monitor", "scroll", "animation", "animation_frames"] : ["app_icon", "format", "empty"]
+            let allowed = kind == "workspaces" ? ["monitor", "scroll", "animation", "animation_frames", "max"] : ["app_icon", "format", "empty"]
             guard allowed.contains(rest) else { return .some("unknown option (\(allowed.joined(separator: ", ")))") }
+            if rest == "max", Int(prop.value).map({ $0 < 0 }) ?? true { return .some("'\(prop.value)' is not a count (0: all)") }
             items[index].options[rest] = prop.value
             return .some(nil)
         }
@@ -526,7 +527,9 @@ public final class BarModel {
             guard component.kind == "workspaces" else { continue }
             let curve = component.options["animation"].flatMap(Curve.init(rawValue:))
             let frames = component.options["animation_frames"].flatMap(Double.init) ?? 15
-            let children = workspaces.map { workspaceItem(component, $0) }
+            // workspaces.max: the first ones only, in skyland's order (0: all); its scratchpads come last
+            let max = component.options["max"].flatMap(Int.init) ?? 0
+            let children = (max > 0 ? Array(workspaces.prefix(max)) : workspaces).map { workspaceItem(component, $0) }
             for child in children {
                 if let curve, let old = before[child.name], old != target(child) {
                     itemTransitions[child.name] = transition(from: old, (curve, frames))

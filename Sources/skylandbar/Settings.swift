@@ -14,8 +14,9 @@ struct SettingField: Identifiable {
         case choice([String])
     }
 
-    /// where it is written: `[bar]`, or the notch item's inline `notch = { ... }` table
-    enum Place { case bar, notch }
+    /// where it is written: `[bar]`, or the inline `notch = { ... }` / `workspaces = { ... }`
+    /// table of the notch's or the workspaces component's item
+    enum Place { case bar, notch, workspaces }
 
     let place: Place
     let key: String
@@ -44,6 +45,10 @@ private let settingGroups: [(title: String, fields: [SettingField])] = [
         SettingField(place: .bar, key: "glass_saturation", label: "Saturation", kind: .number(0.5 ... 3, step: 0.1, unit: "x")),
         SettingField(place: .bar, key: "glass_spacing", label: "Shapes melt within", kind: .number(0 ... 40, step: 1, unit: "pt")),
         SettingField(place: .bar, key: "motion", label: "Animations", kind: .choice(["auto", "full", "reduced"])),
+    ]),
+    ("Workspaces", [
+        SettingField(place: .workspaces, key: "max", label: "At most (0: all)", kind: .number(0 ... 30, step: 1, unit: ""), fallback: "0"),
+        SettingField(place: .workspaces, key: "animation", label: "Animation", kind: .choice(["linear", "quadratic", "tanh", "sin", "exp", "circ"]), fallback: "tanh"),
     ]),
     ("Notch, open", [
         SettingField(place: .notch, key: "glass", label: "Material", kind: .choice(["regular", "clear", "off"]), fallback: "off"),
@@ -94,13 +99,13 @@ final class SettingsModel: ObservableObject {
     @Published var colors = SettingsColors()
 
     let file: String
-    /// the running bar's values: `[bar]` keys, and the notch's name and options
-    private let current: () -> (bar: [String: String], notch: String?, notchOptions: [String: String])
+    /// the running bar's values: `[bar]` keys, and each component's name and options by place
+    private let current: () -> (bar: [String: String], components: [SettingField.Place: (name: String, options: [String: String])])
     /// checks a config's text: nil when it loads, else why not
     private let check: (String) -> String?
     private let reloaded: () -> Void
 
-    init(file: String, current: @escaping () -> (bar: [String: String], notch: String?, notchOptions: [String: String]),
+    init(file: String, current: @escaping () -> (bar: [String: String], components: [SettingField.Place: (name: String, options: [String: String])]),
          check: @escaping (String) -> String?, reloaded: @escaping () -> Void)
     {
         self.file = file
@@ -110,13 +115,14 @@ final class SettingsModel: ObservableObject {
         load()
     }
 
-    var hasNotch: Bool { current().notch != nil }
+    /// a place's fields show when the bar has it
+    func has(_ place: SettingField.Place) -> Bool { place == .bar || current().components[place] != nil }
 
     /// The bar's values; drops unsaved changes (Revert).
     func load() {
         let now = current()
         for field in settingGroups.flatMap(\.fields) {
-            let raw = field.place == .bar ? now.bar[field.key] : now.notchOptions[field.key]
+            let raw = field.place == .bar ? now.bar[field.key] : now.components[field.place]?.options[field.key]
             values[field.id] = raw ?? field.fallback
         }
         pending = [:]
@@ -133,7 +139,7 @@ final class SettingsModel: ObservableObject {
     func save() {
         guard !pending.isEmpty else { return }
         guard var text = try? String(contentsOfFile: file, encoding: .utf8) else { error = "cannot read \(file)"; return }
-        let notch = current().notch
+        let components = current().components
         for field in settingGroups.flatMap(\.fields) {
             guard let raw = pending[field.id] else { continue }
             let value: String
@@ -141,9 +147,11 @@ final class SettingsModel: ObservableObject {
             switch field.place {
                 case .bar:
                     text = TOMLLines.set(text, section: "bar", key: field.key, value: value)
-                case .notch:
-                    guard let notch, let changed = TOMLLines.setInline(text, item: notch, table: "notch", field: field.key, value: value) else {
-                        error = "no `notch = { ... }` line in the notch's [[item]] to write \(field.key) in"
+                case .notch, .workspaces:
+                    let table = field.place == .notch ? "notch" : "workspaces"
+                    guard let item = components[field.place]?.name,
+                          let changed = TOMLLines.setInline(text, item: item, table: table, field: field.key, value: value) else {
+                        error = "no `\(table) = { ... }` line in its [[item]] to write \(field.key) in"
                         return
                     }
                     text = changed
@@ -185,7 +193,7 @@ private struct SettingsView: View {
                         Button("Open config file") { NSWorkspace.shared.open(URL(fileURLWithPath: model.file)) }
                     }
                 } header: { SectionHeader(title: "File", colors: model.colors) }
-                ForEach(settingGroups.filter { model.hasNotch || !$0.title.hasPrefix("Notch") }, id: \.title) { group in
+                ForEach(settingGroups.filter { model.has($0.fields[0].place) }, id: \.title) { group in
                     Section {
                         ForEach(group.fields) { field in row(field) }
                     } header: { SectionHeader(title: group.title, colors: model.colors) }

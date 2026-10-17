@@ -210,7 +210,8 @@ What makes this possible, for any config:
   (`workspace.1.icon=󰇧`). `{name}`, `{apps}` (each app once) and `{count}` (windows) are filled in the icon
   and the label; an icon left empty shows `{name}`. Each item sits on its workspace's display
   (`workspaces.monitor=off`: on every bar). A click goes to that workspace, and scrolling over the
-  items goes to the next or previous one (`workspaces.scroll=off` turns this off). With
+  items goes to the next or previous one (`workspaces.scroll=off` turns this off). `workspaces.max=12`: the first 12 workspaces only,
+  in skyland's order (0, the default: all), which leaves out skyland's scratchpads (`scratch`…). With
   `workspaces.animation=<curve>` (and `workspaces.animation_frames`, 15), the items move to
   their new look. The items also take the component's script and subscriptions, with `NAME`
   set to the item.

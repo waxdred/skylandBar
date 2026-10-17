@@ -19,7 +19,7 @@ background = { drawing = true, color = "0x00000000", height = 28, corner_radius 
 focused = { icon.color = "${accent}", label.color = "${primary}", background.glass = "lens", background.color = "${accent_soft}" }
 empty = { label.string = "", icon.padding_right = 10 }
 hover = { background.color = "${hover}" }
-workspaces = { animation = "tanh", animation_frames = "${spring}" }
+workspaces = { animation = "tanh", animation_frames = "${spring}", max = 12 }   # 1-12: not skyland's scratchpads
 
 [[item]]
 type = "bracket"

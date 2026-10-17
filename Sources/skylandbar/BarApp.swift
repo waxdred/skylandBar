@@ -406,7 +406,12 @@ final class BarApp {
             environment["CONFIG_DIR"] = (file as NSString).deletingLastPathComponent
             let model = SettingsModel(file: file, current: { [unowned self] in
                 let bar = self.model.bar.json.mapValues { "\($0)" }
-                return (bar, self.model.notch?.name, self.model.notch?.options ?? [:])
+                var components: [SettingField.Place: (name: String, options: [String: String])] = [:]
+                if let notch = self.model.notch { components[.notch] = (notch.name, notch.options) }
+                if let workspaces = self.model.items.first(where: { $0.kind == "workspaces" }) {
+                    components[.workspaces] = (workspaces.name, workspaces.options)
+                }
+                return (bar, components)
             }, check: { text in
                 guard file.hasSuffix(".toml") else { return nil }
                 if case .failure(let error) = ConfigFile.plan(text, environment: environment, read: { try? String(contentsOfFile: $0, encoding: .utf8) }) {
