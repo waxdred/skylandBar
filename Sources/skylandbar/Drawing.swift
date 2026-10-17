@@ -161,6 +161,8 @@ struct PanelStyle: Equatable {
     var flare = 0.0
     /// how close its glass backgrounds merge (the bar's glass_spacing)
     var glassSpacing = 0.0
+    /// the window's glass in a part of it only (the notch's panel), else all of it
+    var glassRect: NSRect?
 
     init() {}
 
@@ -618,6 +620,7 @@ final class BarWindow {
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         panel.hasShadow = open
+        panel.ignoresMouseEvents = false // its clear parts too (the glass panel's gap): the mouse stays "in"
         setBlur(0)
     }
 
@@ -648,7 +651,7 @@ final class BarWindow {
         let style = view.style
         var shapes: [GlassShape] = []
         if style.glass != "off" {
-            shapes.append(GlassShape(rect: view.bounds, radius: style.cornerRadius, tint: style.color, style: style.glass))
+            shapes.append(GlassShape(rect: style.glassRect ?? view.bounds, radius: style.cornerRadius, tint: style.color, style: style.glass))
         }
         for background in view.glassBackgrounds() {
             shapes.append(GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),

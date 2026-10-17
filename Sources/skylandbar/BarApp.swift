@@ -845,6 +845,10 @@ final class BarApp {
                     height: max(option("height", 0), closed.height + laid.height + padding),
                     radius: option("corner_radius", 20))
         let p = notchProgress
+        if let glass = notch.options["glass"], glass != "off", p > 0 {
+            return layoutGlassNotch(notch, place: place, glass: glass, laid: laid, children: children, props: props, lengths: lengths,
+                                    middles: middles, row: row, padding: padding, closedHeight: closed.height, frames: &frames)
+        }
         let width = max(closed.width, mix(closed.width, open.width, p)), height = mix(closed.height, open.height, p)
         let frame = NSRect(x: Double(place.rect.midX) - width / 2, y: Double(place.screen.frame.maxY) - height, width: width, height: height)
 
@@ -871,6 +875,51 @@ final class BarApp {
             }
         }
         window.view.show(items, style: style)
+        window.updateGlass(glassSettings(model.bar)) // none: a glass panel that closed goes
+        window.panel.orderFrontRegardless()
+    }
+
+    /// `notch.glass=on`, open or opening: a glass panel drops out from under the notch,
+    /// from the notch's width to its own (`notch.width`, the items' at least), `notch.gap`
+    /// (6) below it; the camera's black stays the notch. Closed, it is the black notch.
+    private func layoutGlassNotch(_ notch: BarItem, place: (screen: NSScreen, display: Int, rect: NSRect), glass: String,
+                                  laid: (places: [String: (x: Double, y: Double)], width: Double, height: Double),
+                                  children: [BarItem], props: [ItemProps], lengths: [Double], middles: [Double],
+                                  row: Double, padding: Double, closedHeight: Double, frames: inout [String: [String: Box]])
+    {
+        let option = { (name: String, fallback: Double) in notch.options[name].flatMap(Double.init) ?? fallback }
+        let gap = option("gap", 6), radius = option("corner_radius", 20), p = notchProgress
+        let panelWidth = max(option("width", 0), laid.width + 2 * padding), panelHeight = max(option("height", 0), laid.height + 2 * padding)
+        let width = max(Double(place.rect.width), panelWidth), height = closedHeight + gap + panelHeight
+        let frame = NSRect(x: Double(place.rect.midX) - width / 2, y: Double(place.screen.frame.maxY) - height, width: width, height: height)
+        // the drop: tucked under the notch at its width, then down and out to its size
+        let w = mix(Double(place.rect.width), panelWidth, p), h = mix(closedHeight, panelHeight, p)
+        let y = mix(0, closedHeight + gap, p)
+
+        let window = notchWindow ?? makeWindow(place.display)
+        if notchWindow == nil {
+            window.view.onBarEntered = { [unowned self] in self.hoverNotch(true) }
+            window.view.onBarExited = { [unowned self] in self.hoverNotch(false) }
+            notchWindow = window
+        }
+        window.configureNotch(frame: frame, open: false) // glass casts no window shadow
+        var style = PanelStyle()
+        style.glass = glass
+        style.color = notch.options["color"].flatMap(ARGB.parse) ?? .clear // the glass's tint
+        style.cornerRadius = mix(8, radius, p)
+        style.glassRect = NSRect(x: (width - w) / 2, y: y, width: w, height: h)
+        var items: [PlacedItem] = []
+        if p >= 1 {
+            let left = (width - laid.width) / 2, top = closedHeight + gap + (panelHeight - laid.height) / 2
+            for index in children.indices {
+                guard let spot = laid.places[children[index].name] else { continue }
+                items.append(placed(children[index], props[index], x: left + spot.x, length: lengths[index], top: top + spot.y, height: row,
+                                    middle: middles[index]))
+                frames[children[index].name, default: [:]]["notch"] = Box(x: left + spot.x, y: top + spot.y, width: lengths[index], height: row)
+            }
+        }
+        window.view.show(items, style: style)
+        window.updateGlass(glassSettings(model.bar))
         window.panel.orderFrontRegardless()
     }
 

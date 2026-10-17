@@ -103,3 +103,33 @@ name = "status.glass"
 members = ["volume", "battery", "clock"]
 background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true, padding_left = 4, padding_right = 4 }
 
+
+# --- the notch: hover it, a wide glass panel drops out from under it -------------------------
+# gap 16: below the bar (40 pt + 4), not just the notch. Something simple to start with:
+# the date and what plays; put your own items in it
+# (position = "popup.island")
+
+[[item]]
+type = "notch"
+name = "island"
+notch = { glass = "regular", color = "${glass_tint}", width = 520, height = 96, gap = 16, corner_radius = 24, padding = 16, animation = "tanh", animation_frames = 16 }
+
+[[item]]
+name = "island.date"
+position = "popup.island"
+icon = "􀉉"
+label = { string = "", font = "${font}:Semibold:15" }
+update_freq = 30
+script = 'sketchybar --set "$NAME" label="$(date "+%A %d %B  %H:%M")"'
+subscribe = "notch_open"
+
+[[item]]
+name = "island.song"
+position = "popup.island"
+icon = "􀑪"
+label = { string = "Nothing playing", color = "${secondary}", max_chars = 48 }
+scroll_texts = true
+script = '''
+[ "$SENDER" = media_change ] && sketchybar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
+'''
+subscribe = "media_change"
