@@ -17,6 +17,8 @@ struct GlassShape: Equatable {
     var tint: ARGB
     /// regular | clear | lens (inside another shape: a selection, Apple's tab bar style)
     var style: String
+    /// a moving lens, lifted (0...1): it magnifies more, its rim and shade grow
+    var lift = 0.0
 }
 
 struct GlassSettings: Equatable {
@@ -210,8 +212,9 @@ private final class BackdropShapeLayer: CALayer {
         rimShape.path = outline
         shadowPath = CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
         let clear = shape.style == "clear"
-        shadowOpacity = clear ? 0.08 : 0.18
-        shadowRadius = 8
+        let lift = CGFloat(shape.lift) // a moving lens: lifted, its shadow wider
+        shadowOpacity = Float(clear ? 0.08 : 0.18 + 0.12 * shape.lift)
+        shadowRadius = 8 + 6 * lift
         // the glass's own light: darker and denser in dark mode, milky in light mode, then its tint
         let base = dark ? NSColor(white: 0.08, alpha: clear ? 0.10 : 0.22) : NSColor(white: 1, alpha: clear ? 0.12 : 0.30)
         tint.backgroundColor = (shape.tint.alpha > 0 ? Fonts.color(shape.tint) : base).cgColor

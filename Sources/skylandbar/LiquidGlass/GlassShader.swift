@@ -23,7 +23,7 @@ struct Shape {
     float4 tint;        // rgb and its strength
     float radius;       // pixels
     float clear;        // 1: clear glass, 2: a lens inside the others
-    float2 pad;
+    float2 pad;         // x: a lens's lift, 0...1, while it moves
 };
 
 struct VOut {
@@ -150,8 +150,9 @@ fragment float4 glass_fragment(VOut in [[stage_in]],
     for (int i = 0; i < u.count; i++) {
         Shape ls = shapes[i];
         if (ls.clear < 1.5) continue;
+        float lift = ls.pad.x;                                   // lifted while it moves
         float dl = shape_distance(ls, px);
-        color *= 1.0 - 0.10 * (1.0 - smoothstep(0.0, 3.0 * u.scale, max(dl, 0.0))) * step(0.0, dl); // shade outside
+        color *= 1.0 - (0.10 + 0.10 * lift) * (1.0 - smoothstep(0.0, (3.0 + 4.0 * lift) * u.scale, max(dl, 0.0))) * step(0.0, dl); // shade outside
         if (dl > 1.0) continue;
         float cl = clamp(0.5 - dl, 0.0, 1.0);
         float2 c = ls.rect.xy + ls.rect.zw * 0.5;
@@ -159,7 +160,7 @@ fragment float4 glass_fragment(VOut in [[stage_in]],
                            shape_distance(ls, px + float2(0.0, e)) - shape_distance(ls, px - float2(0.0, e)));
         ml = ml / max(length(ml), 1e-4);
         float edge = pow(clamp(1.0 - (-dl) / (0.35 * ls.rect.w + 1.0), 0.0, 1.0), 2.0);
-        float2 lat = c + (px - c) / 1.08 - ml * edge * 2.0 * u.scale + u.origin;   // magnified, bent at its edge
+        float2 lat = c + (px - c) / (1.08 + 0.10 * lift) - ml * edge * (2.0 + 2.0 * lift) * u.scale + u.origin;   // magnified, bent at its edge
         float3 lc = backdrop_at(backdrop, s, lat, blur, u.texSize);
         float ll = dot(lc, float3(0.2126, 0.7152, 0.0722));
         lc = mix(float3(ll), lc, u.saturation);
@@ -167,7 +168,7 @@ fragment float4 glass_fragment(VOut in [[stage_in]],
         lc = mix(lc, ls.tint.rgb, ls.tint.a);
         float lf = dot(ml, light);
         float lrim = pow(clamp(1.0 - (-dl) / (1.4 * u.scale), 0.0, 1.0), 1.5);
-        lc += lrim * (0.55 * max(lf, 0.0) + 0.25 * max(-lf, 0.0));
+        lc += lrim * ((0.55 + 0.30 * lift) * max(lf, 0.0) + (0.25 + 0.10 * lift) * max(-lf, 0.0));
         float ltop = clamp((px.y - ls.rect.y) / max(ls.rect.w, 1.0), 0.0, 1.0);
         lc += (1.0 - smoothstep(0.0, 0.5, ltop)) * 0.06;
         color = mix(color, lc, cl);

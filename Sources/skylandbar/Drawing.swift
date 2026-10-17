@@ -687,9 +687,11 @@ final class BarWindow {
         let indices = shapes.indices.filter { shapes[$0].style == "lens" }
         let targets = indices.map { Box(x: Double(shapes[$0].rect.minX), y: Double(shapes[$0].rect.minY),
                                         width: Double(shapes[$0].rect.width), height: Double(shapes[$0].rect.height)) }
-        let (rects, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)
-        for (index, rect) in zip(indices, rects) {
+        let (rects, lifts, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)
+        for (offset, index) in indices.enumerated() {
+            let rect = rects[offset]
             shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+            shapes[index].lift = lifts[offset]
         }
         glass?.update(shapes, settings: glassSettings, window: panel)
         if moving && lensTicker == nil {

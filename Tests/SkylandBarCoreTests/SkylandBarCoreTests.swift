@@ -876,7 +876,7 @@ final class LensMotionTests: XCTestCase {
         var maxX = -Double.infinity, maxWidth = 0.0, settled: Int?
         var last = target
         for frame in 1 ... frames {
-            let (rects, moving) = motion.step([target], now: start + Double(frame) / fps)
+            let (rects, _, moving) = motion.step([target], now: start + Double(frame) / fps)
             last = rects[0]
             maxX = max(maxX, last.x)
             maxWidth = max(maxWidth, last.width)
@@ -893,10 +893,10 @@ final class LensMotionTests: XCTestCase {
         let slide = run(motion, to: b, from: 1, frames: 90)
         XCTAssertEqual(slide.last, b) // there, at rest
         XCTAssertNotNil(slide.settled)
-        XCTAssertLessThan(slide.settled!, 40) // about half a second
+        XCTAssertLessThan(slide.settled!, 45) // about half a second, its lift settled too
         XCTAssertGreaterThan(slide.maxX, b.x + 1) // a little past it (bounce 0.3), then back
-        XCTAssertGreaterThan(slide.maxWidth, 70) // stretched on its way
-        XCTAssertLessThanOrEqual(slide.maxWidth, 60 * 1.35 + 0.5)
+        XCTAssertGreaterThan(slide.maxWidth, 80) // stretched on its way: its leading end goes first
+        XCTAssertLessThanOrEqual(slide.maxWidth, 60 * 1.8 + 0.5)
     }
 
     func testNoBounceNoStretch() {
@@ -922,5 +922,23 @@ final class LensMotionTests: XCTestCase {
         XCTAssertFalse(still.moving)
         motion.response = 0
         XCTAssertFalse(motion.step([target], now: 0.2).moving) // response 0: it jumps
+    }
+}
+
+extension LensMotionTests {
+    func testLiftAndThinner() {
+        let motion = LensMotion()
+        let a = Box(x: 0, y: 0, width: 60, height: 28), b = Box(x: 300, y: 0, width: 60, height: 28)
+        _ = motion.step([a], now: 0)
+        for frame in 1 ... 60 { _ = motion.step([a], now: Double(frame) / 60) }
+        var maxLift = 0.0, minHeight = 28.0
+        for frame in 1 ... 30 {
+            let step = motion.step([b], now: 1 + Double(frame) / 60)
+            maxLift = max(maxLift, step.lifts[0])
+            minHeight = min(minHeight, step.rects[0].height)
+        }
+        XCTAssertGreaterThan(maxLift, 0.5) // lifted on its way
+        XCTAssertLessThan(minHeight, 27) // thinner as it stretches
+        XCTAssertGreaterThanOrEqual(minHeight, 28 * 0.8 - 0.01)
     }
 }

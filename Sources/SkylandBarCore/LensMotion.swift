@@ -1,10 +1,16 @@
 import Foundation
 
 /// How a selection lens (`background.glass = "lens"`) moves, as Apple's tab bars: when it
-/// goes to another item, it slides there on a spring (`glass_lens_response` seconds,
-/// `glass_lens_bounce` from 0, no overshoot, to 1), stretching along its way the faster it
-/// goes (`glass_lens_stretch`, 0: none), like a drop; a lens that appears grows out of 70 %.
-/// The spring keeps its speed when the target changes on the way. Rects in points.
+/// goes to another item it flows there like a drop. Its two ends are springs of their own:
+/// the leading one leaves first and fast, the trailing one follows later and catches up, so
+/// the drop stretches on its way and settles with a little jelly; stretched, it gets
+/// thinner, as a drop keeps its volume; and it is lifted while it moves (`lift`, 0...1: the
+/// glass magnifies more, its rim and shade grow).
+///
+/// `glass_lens_response` (seconds) is the spring of the whole, `glass_lens_bounce` its
+/// overshoot (0...1), `glass_lens_stretch` how unlike the ends are (0: it slides in one
+/// piece). A spring keeps its speed when the target changes on the way; a lens that appears
+/// grows out of 70 %. Rects in points.
 public final class LensMotion {
     public var response = 0.35
     public var bounce = 0.3
@@ -15,58 +21,86 @@ public final class LensMotion {
         var velocity = 0.0
     }
 
-    /// center x, center y, width, height of each lens
-    private var lenses: [[Spring]] = []
+    /// left, right, center y, height; and how lifted it is
+    private struct Lens {
+        var left: Spring
+        var right: Spring
+        var middle: Spring
+        var height: Spring
+        var lift = 0.0
+    }
+
+    private var lenses: [Lens] = []
     private var last: Double?
 
     public init() {}
 
-    public var isMoving: Bool { lenses.contains { $0.contains { abs($0.velocity) > 0 } } }
-
-    /// The rects to draw for these targets at `now` (seconds), and whether they still move.
-    public func step(_ targets: [Box], now: Double, reduceMotion: Bool = false) -> (rects: [Box], moving: Bool) {
-        let goals = targets.map { [$0.x + $0.width / 2, $0.y + $0.height / 2, $0.width, $0.height] }
+    /// The rects to draw for these targets at `now` (seconds), how lifted each is, and
+    /// whether they still move.
+    public func step(_ targets: [Box], now: Double, reduceMotion: Bool = false) -> (rects: [Box], lifts: [Double], moving: Bool) {
         defer { last = now }
         if reduceMotion || response <= 0 {
-            lenses = goals.map { $0.map { Spring(value: $0) } }
-            return (targets, false)
+            lenses = targets.map { Lens(left: Spring(value: $0.x), right: Spring(value: $0.x + $0.width),
+                                        middle: Spring(value: $0.y + $0.height / 2), height: Spring(value: $0.height)) }
+            return (targets, targets.map { _ in 0 }, false)
         }
         // the lenses there were keep going; a new one grows from 70 % of its size
-        lenses = goals.indices.map { index in
+        lenses = targets.indices.map { index in
             if index < lenses.count { return lenses[index] }
-            let goal = goals[index]
-            return [Spring(value: goal[0]), Spring(value: goal[1]), Spring(value: goal[2] * 0.7), Spring(value: goal[3] * 0.7)]
+            let t = targets[index], center = t.x + t.width / 2
+            return Lens(left: Spring(value: center - t.width * 0.35), right: Spring(value: center + t.width * 0.35),
+                        middle: Spring(value: t.y + t.height / 2), height: Spring(value: t.height * 0.7))
         }
         let dt = min(max(now - (last ?? now), 0), 1.0 / 20)
-        let stiffness = pow(2 * Double.pi / response, 2)
-        let damping = 2 * max(0.05, 1 - bounce) * stiffness.squareRoot()
-        let steps = max(1, Int((dt * 240).rounded(.up))) // small steps: stable at any frame rate
+        let steps = max(1, Int((dt * 240).rounded(.up))) // small steps: the same at any frame rate
         let h = dt / Double(steps)
+        let lead = response / (1 + 0.3 * stretch), trail = response * (1 + 0.15 * stretch)
         var moving = false
         var rects: [Box] = []
+        var lifts: [Double] = []
         for index in lenses.indices {
-            for component in 0 ..< 4 {
-                var spring = lenses[index][component]
-                let goal = goals[index][component]
-                for _ in 0 ..< steps {
-                    spring.velocity += (-stiffness * (spring.value - goal) - damping * spring.velocity) * h
-                    spring.value += spring.velocity * h
-                }
-                if abs(spring.value - goal) < 0.2 && abs(spring.velocity) < 2 {
-                    spring = Spring(value: goal) // there: snapped, at rest
-                } else {
-                    moving = true
-                }
-                lenses[index][component] = spring
+            let t = targets[index]
+            var lens = lenses[index]
+            let goingRight = t.x + t.width / 2 > (lens.left.value + lens.right.value) / 2
+            let settled = [
+                advance(&lens.left, to: t.x, response: goingRight ? trail : lead, steps: steps, h: h),
+                advance(&lens.right, to: t.x + t.width, response: goingRight ? lead : trail, steps: steps, h: h),
+                advance(&lens.middle, to: t.y + t.height / 2, response: response, steps: steps, h: h),
+                advance(&lens.height, to: t.height, response: response, steps: steps, h: h),
+            ].allSatisfy { $0 }
+            // lifted while it moves fast, settling as it slows
+            let speed = abs(lens.left.velocity + lens.right.velocity) / 2
+            lens.lift += (min(1, speed / 500) - lens.lift) * min(1, dt * 18)
+            if settled && lens.lift < 0.01 { lens.lift = 0 }
+            if !settled || lens.lift > 0 { moving = true }
+            lenses[index] = lens
+
+            // drawn: at most 1.8 times as long, from its leading end; thinner as it stretches
+            var left = lens.left.value, right = lens.right.value
+            let longest = t.width * 1.8
+            if right - left > longest {
+                if goingRight { left = right - longest } else { right = left + longest }
             }
-            let lens = lenses[index]
-            // a drop: longer along its way, a little thinner, the faster it goes
-            let speed = abs(lens[0].velocity)
-            let longer = min(speed * 0.045 * stretch, lens[2].value * 0.35)
-            let thinner = min(speed * 0.012 * stretch, lens[3].value * 0.15)
-            let width = lens[2].value + longer, height = lens[3].value - thinner
-            rects.append(Box(x: lens[0].value - width / 2, y: lens[1].value - height / 2, width: width, height: height))
+            let width = max(1, right - left)
+            let height = lens.height.value * min(1.06, max(0.8, (t.width / width).squareRoot()))
+            rects.append(Box(x: left, y: lens.middle.value - height / 2, width: width, height: height))
+            lifts.append(lens.lift)
         }
-        return (rects, moving)
+        return (rects, lifts, moving)
+    }
+
+    /// One spring toward `goal`; true once it is there at rest (then snapped onto it).
+    private func advance(_ spring: inout Spring, to goal: Double, response: Double, steps: Int, h: Double) -> Bool {
+        let stiffness = pow(2 * Double.pi / response, 2)
+        let damping = 2 * max(0.05, 1 - bounce) * stiffness.squareRoot()
+        for _ in 0 ..< steps {
+            spring.velocity += (-stiffness * (spring.value - goal) - damping * spring.velocity) * h
+            spring.value += spring.velocity * h
+        }
+        if abs(spring.value - goal) < 0.2 && abs(spring.velocity) < 2 {
+            spring = Spring(value: goal)
+            return true
+        }
+        return false
     }
 }

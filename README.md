@@ -120,10 +120,13 @@ To get `metal`, allow skylandbar in System Settings > Privacy & Security > Scree
 restart it (`--bar glass_engine=metal` asks once). The capture only covers the bar and a margin
 around it, and sends a frame only when what is behind changes.
 
-A selection lens (`background.glass = "lens"`, the focused workspace in the theme) slides to
-its new item on a spring, as Apple's tab bars do: `glass_lens_response` (seconds, 0.35; 0 jumps),
-`glass_lens_bounce` (overshoot, 0 to 1, 0.3), `glass_lens_stretch` (how much it stretches along
-its way, like a drop; 0: none). A lens that appears grows out of 70 %. Reduce Motion: no slide.
+A selection lens (`background.glass = "lens"`, the focused workspace in the theme) flows to its
+new item like a drop, as Apple's tab bars do: its leading end leaves first and fast, its trailing
+end follows and catches up, so it stretches on its way (thinner, as a drop keeps its volume, at
+most 1.8 times as long) and settles with a little jelly; while it moves it is lifted (it
+magnifies more, its rim and shade grow). `glass_lens_response` (seconds, 0.35; 0 jumps),
+`glass_lens_bounce` (overshoot, 0 to 1, 0.3), `glass_lens_stretch` (how unlike its ends are; 0:
+it slides in one piece). A lens that appears grows out of 70 %. Reduce Motion: no slide.
 
 `motion` on the bar decides for all of skylandbar's animations (lenses, `--animate`, workspaces,
 hover, the notch): `auto` (the default) follows macOS's Reduce Motion, `full` animates anyway,
