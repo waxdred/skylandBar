@@ -69,7 +69,7 @@ glass_spacing = 8          # glass shapes nearer than 8 pt merge (NSGlassEffectC
 # who draws the glass: auto takes Apple's on macOS 26, else skylandbar's Metal glass
 # (refraction, rim light; needs Screen Recording), else Core Animation's blur
 glass_engine = "auto"
-glass_refraction = 14      # how far the edges bend what is behind, points
+glass_refraction = 6       # how far the edges bend what is behind, points (at most a shape's half height / 2.2)
 glass_blur = 2
 glass_saturation = 1.6
 font_smoothing = false

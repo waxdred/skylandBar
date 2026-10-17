@@ -112,7 +112,7 @@ engines (`--bar glass_engine=...`, `auto` by default, which takes the first this
 | Engine | What it is | Needs |
 | --- | --- | --- |
 | `system` | Apple's NSGlassEffectView in an NSGlassEffectContainerView | macOS 26 |
-| `metal` | skylandbar's shader over what is behind the bar (ScreenCaptureKit, without skylandbar's own windows): the edges bend it as a lens would (`glass_refraction`, points), colors split a little there, a light blur (`glass_blur`) and saturation (`glass_saturation`), the glass's own light in dark and light mode, a rim lit from the top left, a sheen, a faint inner shadow; shapes closer than `glass_spacing` melt into one | Screen Recording |
+| `metal` | skylandbar's shader over what is behind the bar (ScreenCaptureKit, without skylandbar's own windows): the edges bend it as a lens would (`glass_refraction`, points, at most a shape's half height / 2.2 so it magnifies and never mirrors), colors split a little there, a light blur (`glass_blur`) and saturation (`glass_saturation`), the glass's own light in dark and light mode, a rim lit from the top left, a sheen, a faint inner shadow; shapes closer than `glass_spacing` melt into one | Screen Recording |
 | `backdrop` | Core Animation's backdrop layer (the window server's blur, saturated) under a tint, a sheen, a rim light and a soft shadow; no refraction | nothing |
 
 The bar says on stderr (or in `~/Library/Logs/skylandbar.log` as a service) which one it took.

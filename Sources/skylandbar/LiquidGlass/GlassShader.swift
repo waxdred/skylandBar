@@ -106,11 +106,14 @@ fragment float4 glass_fragment(VOut in [[stage_in]],
     float2 half_size = sh.rect.zw * 0.5;
     float clear = sh.clear;
     float inside = -d;                                         // pixels in from the edge
-    float band = max(min(half_size.x, half_size.y), 1.0);
-    float lens = pow(clamp(1.0 - inside / band, 0.0, 1.0), 2.5);   // 1 at the edge, 0 inside
-
-    // refraction: near the edge, what is behind comes from further in, as through a convex lens
-    float bend = lens * u.refraction * u.scale * (clear > 0.5 ? 1.25 : 1.0);
+    // the lens: `depth` at the edge, fading to nothing `band` in, band = 2.2 * depth so its
+    // slope (2 * depth / band) stays under 1: what is behind is magnified toward the edge,
+    // never folded back into a mirror image. Both fit in the shape's half height.
+    float half_min = max(min(half_size.x, half_size.y), 1.0);
+    float depth = min(u.refraction * u.scale * (clear > 0.5 ? 1.25 : 1.0), half_min / 2.2);
+    float band = max(depth * 2.2, 1.0);
+    float lens = pow(clamp(1.0 - inside / band, 0.0, 1.0), 2.0);   // 1 at the edge, 0 from band in
+    float bend = lens * depth;
     float2 at = px + u.origin - n * bend;
     float blur = u.blur * u.scale * (clear > 0.5 ? 0.4 : 1.0);
     float split = bend * 0.07;                                  // colors part where it bends most
