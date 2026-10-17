@@ -68,7 +68,10 @@ func checkConfig(_ file: String) -> Int32 {
         return 1
     }
     let plan: ConfigPlan
-    switch ConfigFile.plan(text, environment: ProcessInfo.processInfo.environment) {
+    // as the bar runs it: includes relative to the file's directory
+    var environment = ProcessInfo.processInfo.environment
+    environment["CONFIG_DIR"] = URL(fileURLWithPath: file).deletingLastPathComponent().path
+    switch ConfigFile.plan(text, environment: environment, read: { try? String(contentsOfFile: $0, encoding: .utf8) }) {
         case .failure(let error):
             print("\(file): \(error.message)")
             return 1

@@ -835,7 +835,7 @@ final class LiquidGlassTests: XCTestCase {
         for name in ["skylandbar.toml", "liquid-glass.toml"] {
             let text = try String(contentsOf: repository.appendingPathComponent("examples/\(name)"), encoding: .utf8)
             for appearance in ["dark", "light"] {
-                let plan = try ConfigFile.plan(text, environment: ["CONFIG_DIR": repository.path, "APPEARANCE": appearance], read: read).get()
+                let plan = try ConfigFile.plan(text, environment: ["CONFIG_DIR": repository.path + "/examples", "APPEARANCE": appearance], read: read).get()
                 let model = BarModel()
                 for step in plan.steps {
                     let outcome = send(model, step.arguments)

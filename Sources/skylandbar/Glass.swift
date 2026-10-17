@@ -56,6 +56,7 @@ enum Glass {
             }
         #endif
         view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous // Apple's shapes: no circular corners
         view.layer?.masksToBounds = true
         view.layer?.backgroundColor = Fonts.color(tint).cgColor
     }

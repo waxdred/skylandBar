@@ -103,6 +103,8 @@ enum Client {
 final class Server {
     private let handle: ([String]) -> (ok: Bool, text: String)
     private var fd: Int32 = -1
+    /// the socket file this bar made: on quit it removes only that one, not a newer bar's
+    private var inode: ino_t = 0
 
     init(handle: @escaping ([String]) -> (ok: Bool, text: String)) {
         self.handle = handle
@@ -119,6 +121,8 @@ final class Server {
             }
         }
         guard bound == 0, listen(fd, 64) == 0 else { return false }
+        var info = stat()
+        if stat(Socket.path, &info) == 0 { inode = info.st_ino }
         let listener = fd, handle = self.handle
         let thread = Thread {
             while true {
@@ -143,6 +147,7 @@ final class Server {
 
     func stop() {
         if fd >= 0 { close(fd) }
-        unlink(Socket.path)
+        var info = stat()
+        if stat(Socket.path, &info) == 0, info.st_ino == inode { unlink(Socket.path) }
     }
 }

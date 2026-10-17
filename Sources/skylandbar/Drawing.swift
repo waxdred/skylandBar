@@ -9,15 +9,33 @@ enum Fonts {
     private static var cache: [FontSpec: NSFont] = [:]
 
     /// "Hack Nerd Font:Bold:14.0": CoreText's match for that family and style, as sketchybar
-    /// does (a missing family gives CoreText's fallback, Helvetica, there too).
+    /// does (a missing family gives CoreText's fallback, Helvetica, there too). "SF Pro" not
+    /// installed as a font is the system font, the same face with SF Symbols' glyphs.
     static func font(_ spec: FontSpec) -> NSFont {
         if let font = cache[spec] { return font }
         let descriptor = CTFontDescriptorCreateWithAttributes([
             kCTFontFamilyNameAttribute: spec.family, kCTFontStyleNameAttribute: spec.style, kCTFontSizeAttribute: spec.size,
         ] as CFDictionary)
-        let result = CTFontCreateWithFontDescriptor(descriptor, 0, nil) as NSFont
+        var result = CTFontCreateWithFontDescriptor(descriptor, 0, nil) as NSFont
+        if spec.family.hasPrefix("SF Pro"), result.familyName != spec.family {
+            result = NSFont.systemFont(ofSize: CGFloat(spec.size), weight: weight(spec.style))
+        }
         cache[spec] = result
         return result
+    }
+
+    private static func weight(_ style: String) -> NSFont.Weight {
+        switch style.lowercased() {
+            case "ultralight": return .ultraLight
+            case "thin": return .thin
+            case "light": return .light
+            case "medium": return .medium
+            case "semibold": return .semibold
+            case "bold": return .bold
+            case "heavy": return .heavy
+            case "black": return .black
+            default: return .regular
+        }
     }
 
     static func color(_ color: ARGB) -> NSColor {
@@ -71,7 +89,7 @@ enum Fonts {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font]))
         var ascent: CGFloat = 0, descent: CGFloat = 0
         CTLineGetTypographicBounds(line, &ascent, &descent, nil)
-        let result = (floor(CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).width + 1.5), Double(ceil((ascent - descent) / 2)))
+        let result = (width: Double(floor(CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).width + 1.5)), baseline: Double(ceil((ascent - descent) / 2)))
         if measured.count > 2048 { measured.removeAll() }
         measured[key] = result
         return result
@@ -237,7 +255,7 @@ final class BarView: NSView {
     /// The notch in a flipped `rect`: its top edge along the screen's, curving out by
     /// `flare` at each end, its bottom corners rounded by `radius`.
     static func notchPath(_ rect: NSRect, radius: Double, flare: Double) -> NSBezierPath {
-        let w = rect.width, h = rect.height, r = min(flare, w / 4), big = max(0, min(radius, (w - 2 * r) / 2, h - r))
+        let w = Double(rect.width), h = Double(rect.height), r = min(flare, w / 4), big = max(0, min(radius, (w - 2 * r) / 2, h - r))
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.minY))
         path.curve(to: NSPoint(x: rect.minX + r, y: rect.minY + r), controlPoint1: NSPoint(x: rect.minX + r, y: rect.minY),

@@ -89,7 +89,7 @@ name = "volume"
 position = "right"
 icon = "􀊩"
 script = '''
-[ "$SENDER" = volume_change ] || exit 0
+[ "$SENDER" = volume_change ] || INFO=$(osascript -e "output volume of (get volume settings)")
 icon=􀊩; [ "$INFO" -lt 66 ] && icon=􀊥; [ "$INFO" -lt 33 ] && icon=􀊡; [ "$INFO" -eq 0 ] && icon=􀊣
 sketchybar --set "$NAME" icon="$icon" label="$INFO%"
 '''

@@ -93,6 +93,9 @@ final class BarApp {
             self.focusChanged()
             self.scripts.run(self.model.scripts(for: "display_change"))
         }
+        // a client gone before its answer (`already running` checks connect and close): a
+        // failed write, not the bar's end
+        Darwin.signal(SIGPIPE, SIG_IGN)
         for signal in [SIGTERM, SIGINT] {
             Darwin.signal(signal, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: signal, queue: .main)
