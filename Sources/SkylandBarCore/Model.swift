@@ -47,6 +47,8 @@ public struct Outcome: Equatable {
     public var animating = false
     /// a workspaces or title component was added: the app asks skyland for its data
     public var componentsChanged = false
+    /// a notch was added, set or opened / closed: the app lays it out again
+    public var notchChanged = false
     /// custom events (their distributed notifications)
     public var eventsChanged = false
     public var reload = false
@@ -60,7 +62,7 @@ public let builtinEvents = [
     "front_app_switched", "space_change", "space_windows_change", "display_change", "volume_change",
     "brightness_change", "power_source_change", "wifi_change", "media_change", "system_will_sleep", "system_woke",
     "mouse.entered", "mouse.exited", "mouse.entered.global", "mouse.exited.global", "mouse.clicked",
-    "mouse.scrolled", "mouse.scrolled.global", "forced", "routine",
+    "mouse.scrolled", "mouse.scrolled.global", "forced", "routine", "notch_open", "notch_close",
 ] + skylandEvents
 
 /// The events skylandbar sends from skyland's (or AeroSpace's) `subscribe`, with their
@@ -238,6 +240,7 @@ public final class BarModel {
                         }
                     }
                     for prop in props {
+                        if items[index].kind == "notch" { o.notchChanged = true }
                         if let error = setComponent(index, prop) ?? items[index].props.apply(prop.key, prop.value) {
                             o.errors.append("[!] Set \(items[index].name): \(prop.key)=\(prop.value): \(error)")
                         }
@@ -355,6 +358,8 @@ public final class BarModel {
                 props.position = position
                 if kind == "graph", let width = Double(args[1]) { props.graph.width = width }
                 if kind == "slider", let width = Double(args[1]) { props.slider.width = width }
+            case "notch": // not on the bar: its window is at the display's notch
+                props.position = "notch"
             default: // bracket: drawn from milestone 2
                 props.position = "bracket"
         }
@@ -362,6 +367,7 @@ public final class BarModel {
         o.redraw = true
         if kind == "alias" { o.timersChanged = true }
         if kind == "workspaces" || kind == "title" { o.componentsChanged = true }
+        if kind == "notch" { o.notchChanged = true }
     }
 
     // MARK: skyland components
@@ -371,8 +377,10 @@ public final class BarModel {
     private func setComponent(_ index: Int, _ prop: Prop) -> String?? {
         let kind = items[index].kind
         let (head, rest) = splitKey(prop.key)
-        guard (kind == "workspaces" && (head == "workspaces" || workspaceStates.contains(head))) || (kind == "title" && head == "title"),
+        guard (kind == "workspaces" && (head == "workspaces" || workspaceStates.contains(head))) || (kind == "title" && head == "title")
+            || (kind == "notch" && head == "notch"),
               let rest else { return nil }
+        if kind == "notch" { return .some(setNotch(index, rest, prop.value)) }
         if head == kind {
             let allowed = kind == "workspaces" ? ["monitor", "scroll", "animation", "animation_frames"] : ["app_icon", "format", "empty"]
             guard allowed.contains(rest) else { return .some("unknown option (\(allowed.joined(separator: ", ")))") }
@@ -386,6 +394,43 @@ public final class BarModel {
         props.append(Prop(rest, prop.value))
         items[index].states[head] = props
         return .some(nil)
+    }
+
+    // MARK: notch
+
+    /// `notch.*`: numbers (sizes in points, delays in seconds, frames), a curve, on/off.
+    /// `open` (on, off, toggle) opens or closes it now.
+    private func setNotch(_ index: Int, _ option: String, _ value: String) -> String? {
+        switch option {
+            case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames":
+                guard let number = Double(value), number >= 0 else { return "'\(value)' is not a number from 0" }
+            case "color":
+                guard ARGB.parse(value) != nil else { return "'\(value)' is not a color (0xAARRGGBB)" }
+            case "animation":
+                guard Curve(rawValue: value) != nil else { return "'\(value)' is not one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))" }
+            case "horizontal", "fake":
+                guard Value.bool(value, current: false) != nil else { return "'\(value)' is not on or off" }
+            case "open":
+                guard let open = Value.bool(value, current: items[index].options["open"] == "on") else { return "'\(value)' is not on, off or toggle" }
+                items[index].options["open"] = open ? "on" : "off"
+                return nil
+            default:
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open)"
+        }
+        items[index].options[option] = value
+        return nil
+    }
+
+    /// The notch component, its options and whether it is open.
+    public var notch: BarItem? { items.first { $0.kind == "notch" } }
+
+    /// The mouse opened or closed it: true when that changed it (its scripts get
+    /// notch_open / notch_close).
+    @discardableResult
+    public func setNotchOpen(_ open: Bool) -> Bool {
+        guard let index = items.firstIndex(where: { $0.kind == "notch" }), (items[index].options["open"] == "on") != open else { return false }
+        items[index].options["open"] = open ? "on" : "off"
+        return true
     }
 
     /// New data from skyland: the workspace items follow. True when some animate.

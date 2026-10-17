@@ -73,7 +73,7 @@ public enum CommandParser {
             case "--bar":
                 return props(args, name).map { .bar($0) }
             case "--add":
-                if let error = need(2, "<item|event|bracket|graph|slider|alias|space|workspaces|title> <name> ...") { return .failure(error) }
+                if let error = need(2, "<item|event|bracket|graph|slider|alias|space|workspaces|title|notch> <name> ...") { return .failure(error) }
                 let kind = args[0], itemName = args[1], rest = Array(args.dropFirst(2))
                 switch kind {
                     case "item", "alias", "space", "workspaces", "title":
@@ -82,6 +82,8 @@ public enum CommandParser {
                         guard rest.count == 2, Double(rest[1]) != nil else {
                             return .failure(CommandError("--add \(kind): expected <name> <position> <width>"))
                         }
+                    case "notch":
+                        guard rest.isEmpty else { return .failure(CommandError("--add notch: expected <name>")) }
                     case "event":
                         guard rest.count <= 1 else { return .failure(CommandError("--add event: expected <name> [<NSDistributedNotification name>]")) }
                     case "bracket":

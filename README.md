@@ -94,6 +94,33 @@ skylandbar --query bar
   Pick a component name your config does not already use for items (skyland's own profile
   has `workspace.N` items).
 
+- **The notch, boringNotch style**: hovering the camera notch opens a black panel that
+  grows out of it, holding your own items:
+
+  ```sh
+  skylandbar --add notch island \
+             --set island notch.width=340 notch.corner_radius=22 notch.animation=tanh notch.animation_frames=18 \
+             --add item island.song popup.island \
+             --set island.song icon=󰝚 label="Rien en lecture" label.max_chars=40 scroll_texts=on \
+                   script='sketchybar --set $NAME label="$(echo "$INFO" | jq -r \'.artist + " — " + .title\')"' \
+             --subscribe island.song media_change \
+             --add slider island.volume popup.island 260 \
+             --set island.volume icon=󰕾 slider.percentage=50 slider.background.height=5 slider.background.corner_radius=3 \
+                   slider.background.color=0xff3c3c3c slider.highlight_color=0xffffffff \
+                   script='osascript -e "set volume output volume $PERCENTAGE"' --subscribe island.volume mouse.clicked
+  ```
+
+  `--add notch <name>` makes it; the items placed `popup.<name>` are its content, one per
+  row (`notch.horizontal=on`: side by side), and they show once it is open. It opens
+  `notch.open_delay` (0.15 s) after the mouse comes over the notch and closes
+  `notch.close_delay` (0.3 s) after the mouse leaves it, along `notch.animation` (tanh) over
+  `notch.animation_frames` (20). Its size is what the items need, `notch.width` /
+  `notch.height` at least, with `notch.padding` (12), `notch.row_height` (the notch's
+  height), `notch.corner_radius` (20) and `notch.color` (black). `notch.open=on|off|toggle`
+  opens or closes it from a script (on media_change, for example), and items can subscribe to
+  `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
+  one at the top middle of the main display.
+
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes
   the glass tint. It uses `NSGlassEffectView` on macOS 26 when built with Xcode 26, and a blurred

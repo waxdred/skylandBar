@@ -27,5 +27,6 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `11-mach-lua.sh` | le CLI sketchybar et SbarLua par Mach, `--service install` |
 | `12-workspaces.sh` | composants natifs : workspaces (états, clic, molette, animation) et titre |
 | `13-perf.sh` | CPU et mémoire : repos, pluie de `--set`, animation continue |
+| `14-notch.sh` | l'encoche façon boringNotch : survol, animation, contenu, script, `fake` |
 
 Note ce qui ne va pas (le numéro du script et la case) et envoie-le avec une capture.

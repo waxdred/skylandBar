@@ -35,6 +35,13 @@ final class BarApp {
     private var skylandAsking = false
     private var skylandAskAgain = false
     private var lastWorkspaceScroll = 0.0
+    /// the notch: its window, how open it is (0...1, animated), the hover's pending open or close
+    private var notchWindow: BarWindow?
+    private var notchProgress = 0.0
+    private var notchMove: (from: Double, to: Double, start: Double, duration: Double, curve: Curve)?
+    private var notchTicker: FrameTicker?
+    private var notchHover: DispatchWorkItem?
+    private var notchOpen = false
 
     init(configPath: String?) {
         self.configPath = configPath
@@ -136,6 +143,7 @@ final class BarApp {
         if outcome.timersChanged { updateTimers() }
         if outcome.animating { startFrames() }
         if outcome.componentsChanged { askSkyland() }
+        if outcome.notchChanged { notchChanged() }
         if outcome.redraw || outcome.barChanged { setNeedsLayout() }
         scripts.run(outcome.scripts)
     }
@@ -527,6 +535,7 @@ final class BarApp {
             if window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar)) { window.updateGlass() }
         }
         layoutPopups(bar: bar, anchors: &anchors, frames: &frames)
+        layoutNotch(frames: &frames)
         model.frames = frames
         updateScrolling()
     }
@@ -594,6 +603,129 @@ final class BarApp {
             anchors[children[index].name] = (NSRect(x: x + place.x, y: y + laid.height - place.y - row, width: lengths[index], height: row), anchor.display)
         }
         if window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing)) { window.updateGlass() }
+        window.panel.orderFrontRegardless()
+    }
+
+    // MARK: notch
+
+    /// The notch's open state changed (the mouse, or `notch.open` from a script), or its
+    /// options: it animates there and its scripts get notch_open / notch_close.
+    private func notchChanged() {
+        guard let notch = model.notch else {
+            notchWindow?.panel.orderOut(nil)
+            notchWindow = nil
+            return
+        }
+        let open = notch.options["open"] == "on"
+        if open != notchOpen {
+            notchOpen = open
+            let frames = notch.options["animation_frames"].flatMap(Double.init) ?? 20
+            let curve = notch.options["animation"].flatMap(Curve.init(rawValue:)) ?? .tanh
+            notchMove = (notchProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime, frames / framesPerSecond, curve)
+            scripts.run(model.scripts(for: open ? "notch_open" : "notch_close"))
+            if notchTicker == nil {
+                notchTicker = FrameTicker(view: notchWindow?.view) { [unowned self] in self.notchFrame() }
+            }
+        }
+        setNeedsLayout()
+    }
+
+    private func notchFrame() {
+        guard let move = notchMove else { return }
+        let t = move.duration > 0 ? (ProcessInfo.processInfo.systemUptime - move.start) / move.duration : 1
+        notchProgress = mix(move.from, move.to, move.curve.value(t))
+        if t >= 1 {
+            notchProgress = move.to
+            notchMove = nil
+            notchTicker?.stop()
+            notchTicker = nil
+        }
+        layoutNow()
+    }
+
+    /// The mouse over the notch: it opens after `notch.open_delay` (0.15 s) and closes
+    /// `notch.close_delay` (0.3 s) after the mouse leaves it.
+    private func hoverNotch(_ inside: Bool) {
+        notchHover?.cancel()
+        guard let notch = model.notch, (notch.options["open"] == "on") != inside else { return }
+        let delay = notch.options[inside ? "open_delay" : "close_delay"].flatMap(Double.init) ?? (inside ? 0.15 : 0.3)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.model.setNotchOpen(inside) else { return }
+            self.notchChanged()
+        }
+        notchHover = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func isOn(_ value: String?) -> Bool { ["on", "yes", "true", "1"].contains(value ?? "") }
+
+    /// The display with a notch, and the notch (AppKit coordinates); with `notch.fake=on`,
+    /// a notch-sized place at the top middle of the main display when none has one.
+    private func notchPlace(fake: Bool) -> (screen: NSScreen, display: Int, rect: NSRect)? {
+        for (index, screen) in NSScreen.screens.enumerated() where screen.safeAreaInsets.top > 0 {
+            guard let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { continue }
+            let height = screen.safeAreaInsets.top
+            let rect = NSRect(x: screen.frame.minX + left.width, y: screen.frame.maxY - height,
+                              width: screen.frame.width - left.width - right.width, height: height)
+            return (screen, index + 1, rect)
+        }
+        guard fake, let screen = NSScreen.screens.first else { return nil }
+        let height = max(24, screen.frame.maxY - screen.visibleFrame.maxY) // the menu bar's
+        return (screen, 1, NSRect(x: screen.frame.midX - 92, y: screen.frame.maxY - height, width: 184, height: height))
+    }
+
+    /// The notch's window, between the notch's own size (closed: black on the camera's
+    /// black) and the size its items need, `notch.width` / `notch.height` at least.
+    /// The items (`position=popup.<notch>`) show once it is open.
+    private func layoutNotch(frames: inout [String: [String: Box]]) {
+        guard let notch = model.notch, let place = notchPlace(fake: isOn(notch.options["fake"])) else {
+            notchWindow?.panel.orderOut(nil)
+            return
+        }
+        let option = { (name: String, fallback: Double) in notch.options[name].flatMap(Double.init) ?? fallback }
+        let flare = 6.0, padding = option("padding", 12), row = option("row_height", place.rect.height)
+        let children = model.popupItems(of: notch.name).filter { $0.props.drawing }
+        let props = children.map { model.displayed($0) }
+        let middles = zip(children, props).map { middle($0, $1) }
+        let lengths = zip(props, middles).map { Layout.length(of: $0, middle: $1, measure: Fonts.width, image: Images.width) }
+        let slots = children.indices.map { index in
+            Layout.Slot(name: children[index].name, position: "popup", length: lengths[index],
+                        paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight,
+                        fixed: props[index].width != nil)
+        }
+        let horizontal = isOn(notch.options["horizontal"])
+        let laid = Layout.popup(slots, horizontal: horizontal, rowHeight: row, inset: 0)
+        let closed = (width: Double(place.rect.width) + 2 * flare, height: Double(place.rect.height), radius: 8.0)
+        let open = (width: max(option("width", 0), laid.width + 2 * padding) + 2 * flare,
+                    height: max(option("height", 0), closed.height + laid.height + padding),
+                    radius: option("corner_radius", 20))
+        let p = notchProgress
+        let width = max(closed.width, mix(closed.width, open.width, p)), height = mix(closed.height, open.height, p)
+        let frame = NSRect(x: Double(place.rect.midX) - width / 2, y: Double(place.screen.frame.maxY) - height, width: width, height: height)
+
+        let window = notchWindow ?? makeWindow(place.display)
+        if notchWindow == nil {
+            window.view.onBarEntered = { [unowned self] in self.hoverNotch(true) }
+            window.view.onBarExited = { [unowned self] in self.hoverNotch(false) }
+            notchWindow = window
+        }
+        window.configureNotch(frame: frame, open: p > 0)
+        var style = PanelStyle()
+        style.color = notch.options["color"].flatMap(ARGB.parse) ?? .black
+        style.cornerRadius = mix(closed.radius, open.radius, p)
+        style.notch = true
+        style.flare = flare
+        var items: [PlacedItem] = []
+        if p >= 1 { // the items once it is open: they would not fit before
+            let left = (width - laid.width) / 2, top = closed.height + max(0, (height - closed.height - laid.height) / 2)
+            for index in children.indices {
+                guard let place = laid.places[children[index].name] else { continue }
+                items.append(placed(children[index], props[index], x: left + place.x, length: lengths[index], top: top + place.y, height: row,
+                                    middle: middles[index]))
+                frames[children[index].name, default: [:]]["notch"] = Box(x: left + place.x, y: top + place.y, width: lengths[index], height: row)
+            }
+        }
+        window.view.show(items, style: style)
         window.panel.orderFrontRegardless()
     }
 

@@ -7,12 +7,12 @@ import SkylandBarCore
 //   skylandbar --config <rc>   start the bar with that config
 //   skylandbar --bar ... --add item ... --set ...   talk to the running bar, like sketchybar
 
-let version = "0.6.0"
+let version = "0.7.0"
 let usage = """
     usage: skylandbar [--config <file>]       start the bar
            skylandbar --service install|uninstall    start it at login (launchd)
            skylandbar <commands>              send commands to the running bar:
-             --bar <property=value>...        --add item|event|bracket|graph|slider|alias|space|workspaces|title ...
+             --bar <property=value>...        --add item|event|bracket|graph|slider|alias|space|workspaces|title|notch ...
              --set <name|/regex/> <property=value>...    --default <property=value>...
              --subscribe <name> <event>...    --trigger <event> [VAR=value...]
              --remove <name|/regex/>          --move <name> before|after <reference>

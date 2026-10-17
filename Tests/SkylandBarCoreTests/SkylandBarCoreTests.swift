@@ -517,3 +517,30 @@ final class WorkspaceComponentTests: XCTestCase {
         XCTAssertFalse(model.item(named: "t")!.props.icon.background.drawing)
     }
 }
+
+final class NotchTests: XCTestCase {
+    func testNotch() {
+        let model = BarModel()
+        let added = send(model, ["--add", "notch", "island", "--set", "island", "notch.width=360", "notch.animation=tanh", "notch.horizontal=on",
+                                 "--add", "item", "island.song", "popup.island", "--set", "island.song", "label=song"])
+        XCTAssertTrue(added.notchChanged)
+        XCTAssertEqual(model.notch?.name, "island")
+        XCTAssertEqual(model.notch?.props.position, "notch") // never on the bar
+        XCTAssertEqual(model.notch?.options["width"], "360")
+        XCTAssertEqual(model.popupItems(of: "island").map(\.name), ["island.song"])
+        XCTAssertFalse(send(model, ["--set", "island", "notch.width=wide"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--set", "island", "notch.animation=bounce"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--set", "island", "notch.size=1"]).errors.isEmpty)
+        if case .success = CommandParser.parse(["--add", "notch", "two", "left"]) { XCTFail("a notch takes no position") }
+
+        // opened by a script (toggle), by the mouse
+        XCTAssertTrue(send(model, ["--set", "island", "notch.open=toggle"]).notchChanged)
+        XCTAssertEqual(model.notch?.options["open"], "on")
+        XCTAssertFalse(model.setNotchOpen(true)) // already
+        XCTAssertTrue(model.setNotchOpen(false))
+        XCTAssertEqual(model.notch?.options["open"], "off")
+
+        _ = send(model, ["--add", "item", "fan", "left", "--set", "fan", "script=x", "--subscribe", "fan", "notch_open"])
+        XCTAssertEqual(model.scripts(for: "notch_open").map(\.item), ["fan"]) // built in, no --add event
+    }
+}

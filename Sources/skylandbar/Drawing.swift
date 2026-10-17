@@ -137,6 +137,10 @@ struct PanelStyle: Equatable {
     var cornerRadius = 0.0
     var glass = "off"
     var fontSmoothing = false
+    /// the notch's shape: flush with the top, rounded at the bottom (`cornerRadius`), with
+    /// small outward curves (`flare`) where it meets the top edge
+    var notch = false
+    var flare = 0.0
 
     init() {}
 
@@ -212,7 +216,8 @@ final class BarView: NSView {
         let inset = style.borderWidth / 2
         let rect = bounds.insetBy(dx: inset, dy: inset)
         let radius = min(style.cornerRadius, rect.height / 2, rect.width / 2)
-        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        let path = style.notch ? Self.notchPath(bounds, radius: style.cornerRadius, flare: style.flare)
+            : NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         if style.glass == "off" {
             Fonts.color(style.color).setFill()
             path.fill()
@@ -224,6 +229,27 @@ final class BarView: NSView {
         }
         clipBackgrounds()
         for item in items { draw(item) }
+    }
+
+    /// The notch in a flipped `rect`: its top edge along the screen's, curving out by
+    /// `flare` at each end, its bottom corners rounded by `radius`.
+    static func notchPath(_ rect: NSRect, radius: Double, flare: Double) -> NSBezierPath {
+        let w = rect.width, h = rect.height, r = min(flare, w / 4), big = max(0, min(radius, (w - 2 * r) / 2, h - r))
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.minY))
+        path.curve(to: NSPoint(x: rect.minX + r, y: rect.minY + r), controlPoint1: NSPoint(x: rect.minX + r, y: rect.minY),
+                   controlPoint2: NSPoint(x: rect.minX + r, y: rect.minY))
+        path.line(to: NSPoint(x: rect.minX + r, y: rect.minY + h - big))
+        path.curve(to: NSPoint(x: rect.minX + r + big, y: rect.minY + h), controlPoint1: NSPoint(x: rect.minX + r, y: rect.minY + h),
+                   controlPoint2: NSPoint(x: rect.minX + r, y: rect.minY + h))
+        path.line(to: NSPoint(x: rect.minX + w - r - big, y: rect.minY + h))
+        path.curve(to: NSPoint(x: rect.minX + w - r, y: rect.minY + h - big), controlPoint1: NSPoint(x: rect.minX + w - r, y: rect.minY + h),
+                   controlPoint2: NSPoint(x: rect.minX + w - r, y: rect.minY + h))
+        path.line(to: NSPoint(x: rect.minX + w - r, y: rect.minY + r))
+        path.curve(to: NSPoint(x: rect.minX + w, y: rect.minY), controlPoint1: NSPoint(x: rect.minX + w - r, y: rect.minY),
+                   controlPoint2: NSPoint(x: rect.minX + w - r, y: rect.minY))
+        path.close()
+        return path
     }
 
     private func center(_ item: PlacedItem) -> Double { item.top + item.height / 2 - item.props.yOffset } // y_offset up
@@ -542,6 +568,16 @@ final class BarWindow {
         panel.collectionBehavior = Self.behavior(sticky: bar.sticky)
         panel.hasShadow = false
         setBlur(popup.background.drawing && popup.background.glass != "off" ? 0 : popup.blurRadius)
+    }
+
+    /// The notch's window: over the menu bar, at `frame`, on every Space and over full
+    /// screen apps; a shadow once it opens.
+    func configureNotch(frame: NSRect, open: Bool) {
+        panel.setFrame(frame, display: true)
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        panel.hasShadow = open
+        setBlur(0)
     }
 
     private static func level(_ topmost: String) -> NSWindow.Level {
