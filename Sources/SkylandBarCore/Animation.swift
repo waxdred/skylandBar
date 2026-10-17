@@ -151,3 +151,27 @@ extension BarProps {
         return r
     }
 }
+
+/// A spring as SwiftUI's `spring(response:dampingFraction:)`: from 0 toward 1, past it when
+/// `damping` is under 1. boringNotch opens its notch on (0.42, 0.8) and closes it on (0.45, 1).
+public struct Spring: Equatable {
+    public var response: Double
+    public var damping: Double
+
+    public init(response: Double, damping: Double) {
+        self.response = response
+        self.damping = damping
+    }
+
+    /// Its value `t` seconds in.
+    public func value(_ t: Double) -> Double {
+        guard t > 0 else { return 0 }
+        let omega = 2 * Double.pi / max(response, 0.01), zeta = min(max(damping, 0), 1)
+        if zeta >= 1 { return 1 - exp(-omega * t) * (1 + omega * t) }
+        let damped = omega * (1 - zeta * zeta).squareRoot()
+        return 1 - exp(-zeta * omega * t) * (cos(damped * t) + zeta * omega / damped * sin(damped * t))
+    }
+
+    /// When it has settled (within about a thousandth).
+    public var duration: Double { 9 / (2 * Double.pi / max(response, 0.01) * max(damping, 0.1)) }
+}

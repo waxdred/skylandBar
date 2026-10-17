@@ -241,11 +241,13 @@ What makes this possible, for any config:
 
   `--add notch <name>` makes it; the items placed `popup.<name>` are its content, one per
   row (`notch.horizontal=on`: side by side), and they show once it is open. It opens
-  `notch.open_delay` (0.15 s) after the mouse comes over the notch and closes
-  `notch.close_delay` (0.3 s) after the mouse leaves it, along `notch.animation` (tanh) over
-  `notch.animation_frames` (20). Its size is what the items need, `notch.width` /
+  `notch.open_delay` (0.3 s) after the mouse comes over the notch and closes
+  `notch.close_delay` (0.1 s) after the mouse leaves it, on boringNotch's springs
+  (`notch.animation=spring`, the default: a little past open, closing without a bounce), or
+  a curve over `notch.animation_frames` (20). Its size is what the items need, `notch.width` /
   `notch.height` at least, with `notch.padding` (12), `notch.row_height` (the notch's
-  height), `notch.corner_radius` (20) and `notch.color` (black). `notch.open=on|off|toggle`
+  height), `notch.corner_radius` (24, the bottom corners), `notch.flare` (19, the top curves
+  into the screen's edge; 14 and 6 closed) and `notch.color` (black). `notch.open=on|off|toggle`
   opens or closes it from a script (on media_change, for example), and items can subscribe to
   `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
   one at the top middle of the main display. `notch.glass=on` (or `clear`): instead of the black

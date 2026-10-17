@@ -299,6 +299,7 @@ public final class BarModel {
                 let matches = Set(indices(matching: target))
                 if matches.isEmpty { return o.errors.append(noMatch("Remove", target)) }
                 for index in matches { itemTransitions[items[index].name] = nil }
+                if matches.contains(where: { items[$0].kind == "notch" }) { o.notchChanged = true } // its window goes
                 items = items.enumerated().filter { !matches.contains($0.offset) }.map(\.element)
                 o.redraw = true
                 o.timersChanged = true
@@ -450,12 +451,14 @@ public final class BarModel {
     /// `open` (on, off, toggle) opens or closes it now.
     private func setNotch(_ index: Int, _ option: String, _ value: String) -> String? {
         switch option {
-            case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames", "gap":
+            case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames", "gap", "flare":
                 guard let number = Double(value), number >= 0 else { return "'\(value)' is not a number from 0" }
             case "color":
                 guard ARGB.parse(value) != nil else { return "'\(value)' is not a color (0xAARRGGBB)" }
             case "animation":
-                guard Curve(rawValue: value) != nil else { return "'\(value)' is not one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))" }
+                guard value == "spring" || Curve(rawValue: value) != nil else {
+                    return "'\(value)' is not spring or one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))"
+                }
             case "glass":
                 var glass = "off"
                 if let error = Value.setGlass(&glass, value) { return error }
@@ -468,7 +471,7 @@ public final class BarModel {
                 items[index].options["open"] = open ? "on" : "off"
                 return nil
             default:
-                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, gap)"
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, gap, flare)"
         }
         items[index].options[option] = value
         return nil

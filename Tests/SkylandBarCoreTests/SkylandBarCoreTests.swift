@@ -873,6 +873,28 @@ final class LiquidGlassTests: XCTestCase {
         XCTAssertEqual(bare.steps.first?.arguments, ["--bar", "color=0x1a0a84ff", "border_color=0x80000000"])
     }
 
+    /// boringNotch's springs: open a little past 1 then back, close without a bounce
+    func testSpring() {
+        let open = Spring(response: 0.42, damping: 0.8), close = Spring(response: 0.45, damping: 1)
+        XCTAssertEqual(open.value(0), 0)
+        let samples = stride(from: 0.0, through: open.duration, by: 0.005).map(open.value)
+        XCTAssertGreaterThan(samples.max()!, 1.0)       // past it
+        XCTAssertLessThan(samples.max()!, 1.03)
+        XCTAssertEqual(open.value(open.duration), 1, accuracy: 0.002)
+        let closing = stride(from: 0.0, through: close.duration, by: 0.005).map(close.value)
+        XCTAssertLessThanOrEqual(closing.max()!, 1.0)   // never past
+        XCTAssertEqual(close.value(close.duration), 1, accuracy: 0.002)
+    }
+
+    /// removing the notch takes its window away
+    func testRemoveNotch() {
+        let model = BarModel()
+        _ = send(model, ["--add", "notch", "island"])
+        XCTAssertTrue(send(model, ["--remove", "/^island/"]).notchChanged)
+        XCTAssertNil(model.notch)
+        XCTAssertFalse(send(model, ["--set", "island", "notch.animation=bounce"]).errors.isEmpty)
+    }
+
     func testShippedConfigs() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let read = { (path: String) in try? String(contentsOfFile: path, encoding: .utf8) }

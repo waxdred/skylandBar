@@ -42,7 +42,7 @@ final class BarApp {
     /// the notch: its window, how open it is (0...1, animated), the hover's pending open or close
     private var notchWindow: BarWindow?
     private var notchProgress = 0.0
-    private var notchMove: (from: Double, to: Double, start: Double, duration: Double, curve: Curve)?
+    private var notchMove: (from: Double, to: Double, start: Double, duration: Double, curve: Curve, spring: Spring?)?
     private var notchTicker: FrameTicker?
     private var notchHover: DispatchWorkItem?
     private var notchOpen = false
@@ -764,9 +764,11 @@ final class BarApp {
         if open != notchOpen {
             notchOpen = open
             let frames = notch.options["animation_frames"].flatMap(Double.init) ?? 20
-            let curve = notch.options["animation"].flatMap(Curve.init(rawValue:)) ?? .tanh
-            let duration = model.reduceMotion ? 0 : frames / framesPerSecond // Reduce Motion: at once
-            notchMove = (notchProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime, duration, curve)
+            let name = notch.options["animation"] ?? "spring"
+            // boringNotch's springs: a little past open, closing without a bounce
+            let spring = name == "spring" ? (open ? Spring(response: 0.42, damping: 0.8) : Spring(response: 0.45, damping: 1)) : nil
+            let duration = model.reduceMotion ? 0 : spring?.duration ?? frames / framesPerSecond // Reduce Motion: at once
+            notchMove = (notchProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime, duration, Curve(rawValue: name) ?? .tanh, spring)
             scripts.run(model.scripts(for: open ? "notch_open" : "notch_close"))
             if notchTicker == nil {
                 notchTicker = FrameTicker(view: notchWindow?.view) { [unowned self] in self.notchFrame() }
@@ -777,8 +779,9 @@ final class BarApp {
 
     private func notchFrame() {
         guard let move = notchMove else { return }
-        let t = move.duration > 0 ? (ProcessInfo.processInfo.systemUptime - move.start) / move.duration : 1
-        notchProgress = mix(move.from, move.to, move.curve.value(t))
+        let elapsed = ProcessInfo.processInfo.systemUptime - move.start
+        let t = move.duration > 0 ? elapsed / move.duration : 1
+        notchProgress = mix(move.from, move.to, move.spring.map { t >= 1 ? 1 : $0.value(elapsed) } ?? move.curve.value(t))
         if t >= 1 {
             notchProgress = move.to
             notchMove = nil
@@ -788,12 +791,12 @@ final class BarApp {
         layoutNow()
     }
 
-    /// The mouse over the notch: it opens after `notch.open_delay` (0.15 s) and closes
-    /// `notch.close_delay` (0.3 s) after the mouse leaves it.
+    /// The mouse over the notch: it opens after `notch.open_delay` (0.3 s) and closes
+    /// `notch.close_delay` (0.1 s) after the mouse leaves it, as boringNotch.
     private func hoverNotch(_ inside: Bool) {
         notchHover?.cancel()
         guard let notch = model.notch, (notch.options["open"] == "on") != inside else { return }
-        let delay = notch.options[inside ? "open_delay" : "close_delay"].flatMap(Double.init) ?? (inside ? 0.15 : 0.3)
+        let delay = notch.options[inside ? "open_delay" : "close_delay"].flatMap(Double.init) ?? (inside ? 0.3 : 0.1)
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.model.setNotchOpen(inside) else { return }
             self.notchChanged()
@@ -828,7 +831,8 @@ final class BarApp {
             return
         }
         let option = { (name: String, fallback: Double) in notch.options[name].flatMap(Double.init) ?? fallback }
-        let flare = 6.0, padding = option("padding", 12), row = option("row_height", place.rect.height)
+        // boringNotch's shape: closed, top curves 6 and bottom corners 14; open, 19 and 24
+        let flare = 6.0, openFlare = option("flare", 19), padding = option("padding", 12), row = option("row_height", place.rect.height)
         let children = model.popupItems(of: notch.name).filter { $0.props.drawing }
         let props = children.map { model.displayed($0) }
         let middles = zip(children, props).map { middle($0, $1) }
@@ -840,10 +844,10 @@ final class BarApp {
         }
         let horizontal = isOn(notch.options["horizontal"])
         let laid = Layout.popup(slots, horizontal: horizontal, rowHeight: row, inset: 0)
-        let closed = (width: Double(place.rect.width) + 2 * flare, height: Double(place.rect.height), radius: 8.0)
-        let open = (width: max(option("width", 0), laid.width + 2 * padding) + 2 * flare,
+        let closed = (width: Double(place.rect.width) + 2 * flare, height: Double(place.rect.height), radius: 14.0)
+        let open = (width: max(option("width", 0), laid.width + 2 * padding) + 2 * openFlare,
                     height: max(option("height", 0), closed.height + laid.height + padding),
-                    radius: option("corner_radius", 20))
+                    radius: option("corner_radius", 24))
         let p = notchProgress
         if let glass = notch.options["glass"], glass != "off", p > 0 {
             return layoutGlassNotch(notch, place: place, glass: glass, laid: laid, children: children, props: props, lengths: lengths,
@@ -863,9 +867,9 @@ final class BarApp {
         style.color = notch.options["color"].flatMap(ARGB.parse) ?? .black
         style.cornerRadius = mix(closed.radius, open.radius, p)
         style.notch = true
-        style.flare = flare
+        style.flare = mix(flare, openFlare, min(p, 1))
         var items: [PlacedItem] = []
-        if p >= 1 { // the items once it is open: they would not fit before
+        if notchOpen && p >= 0.95 { // the items once it is (nearly) open, through the spring's overshoot
             let left = (width - laid.width) / 2, top = closed.height + max(0, (height - closed.height - laid.height) / 2)
             for index in children.indices {
                 guard let place = laid.places[children[index].name] else { continue }
@@ -909,7 +913,7 @@ final class BarApp {
         style.cornerRadius = mix(8, radius, p)
         style.glassRect = NSRect(x: (width - w) / 2, y: y, width: w, height: h)
         var items: [PlacedItem] = []
-        if p >= 1 {
+        if notchOpen && p >= 0.95 {
             let left = (width - laid.width) / 2, top = closedHeight + gap + (panelHeight - laid.height) / 2
             for index in children.indices {
                 guard let spot = laid.places[children[index].name] else { continue }

@@ -104,15 +104,14 @@ members = ["volume", "battery", "clock"]
 background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true, padding_left = 4, padding_right = 4 }
 
 
-# --- the notch: hover it, a wide glass panel drops out from under it -------------------------
-# gap 16: below the bar (40 pt + 4), not just the notch. Something simple to start with:
-# the date and what plays; put your own items in it
+# --- the notch, boringNotch style: hover it, it grows out of the camera's black on a spring ----
+# Something simple to start with: the date and what plays; put your own items in it
 # (position = "popup.island")
 
 [[item]]
 type = "notch"
 name = "island"
-notch = { glass = "regular", color = "${glass_tint}", width = 520, height = 96, gap = 16, corner_radius = 24, padding = 16, animation = "tanh", animation_frames = 16 }
+notch = { width = 600, height = 190, padding = 16 }   # boringNotch: black, 640 x 190 with its top curves; glass = "regular" for glass
 
 [[item]]
 name = "island.date"
