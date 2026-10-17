@@ -1,4 +1,4 @@
-/// Where items go on a bar, like sketchybar: `left` items from the left edge in the order
+/// Where items go on a bar: `left` items from the left edge in the order
 /// they were added, `right` items from the right edge (the first one added is the
 /// rightmost), `center` items centered, `q` / `e` items to the left / right of the notch.
 /// An item takes `background.padding_left + length + background.padding_right`, or just its
@@ -11,7 +11,7 @@ public enum Layout {
         public var length: Double
         public var paddingLeft: Double
         public var paddingRight: Double
-        /// a fixed `width`: the item takes `length` only, like sketchybar
+        /// a fixed `width`: the item takes `length` only (its paddings inside it)
         public var fixed: Bool
 
         public init(name: String, position: String, length: Double, paddingLeft: Double, paddingRight: Double, fixed: Bool = false) {

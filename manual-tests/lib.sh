@@ -9,7 +9,7 @@ trap cleanup EXIT
 
 if ! "$B" --query bar >/dev/null 2>&1; then
     echo "La barre ne tourne pas. Lance-la d'abord :"
-    echo "  $B --config ~/.config/sketchybar/sketchybarrc &"
+    echo "  $B &"
     exit 1
 fi
 
@@ -23,4 +23,4 @@ step() {
 }
 
 # a script that writes what it received into the item's label
-SHOW='sketchybar --set "$NAME" label="$SENDER ${INFO:0:60}"'
+SHOW='skylandbar --set "$NAME" label="$SENDER ${INFO:0:60}"'

@@ -46,10 +46,10 @@ position = "right"
 icon = "􀐫"
 update_freq = 10
 script = '''
-[ "$SENDER" = mouse.exited.global ] && exec sketchybar --set "$NAME" popup.drawing=off
-sketchybar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"
+[ "$SENDER" = mouse.exited.global ] && exec skylandbar --set "$NAME" popup.drawing=off
+skylandbar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"
 '''
-click_script = 'sketchybar --set "$NAME" popup.drawing=toggle'
+click_script = 'skylandbar --set "$NAME" popup.drawing=toggle'
 subscribe = ["system_woke", "mouse.exited.global"]
 hover = { background.color = "${hover}", background.drawing = true }
 background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
@@ -59,7 +59,7 @@ name = "clock.date"
 position = "popup.clock"
 icon = "􀉉"
 label = { string = "", font = "${font}:Semibold:13" }
-script = 'sketchybar --set "$NAME" label="$(date "+%A %d %B %Y")"'
+script = 'skylandbar --set "$NAME" label="$(date "+%A %d %B %Y")"'
 update_freq = 60
 hover = { background.color = "${hover}", background.drawing = true }
 background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
@@ -78,7 +78,7 @@ case 1 in
   *) icon=􀛩; color="${red}" ;;   # red means one thing: low
 esac
 pmset -g batt | grep -q "AC Power" && icon=􀢋
-sketchybar --set "$NAME" icon="$icon" icon.color="$color" label="$percent%"
+skylandbar --set "$NAME" icon="$icon" icon.color="$color" label="$percent%"
 '''
 subscribe = ["power_source_change", "system_woke", "appearance_change"]
 hover = { background.color = "${hover}", background.drawing = true }
@@ -91,7 +91,7 @@ icon = "􀊩"
 script = '''
 [ "$SENDER" = volume_change ] || INFO=$(osascript -e "output volume of (get volume settings)")
 icon=􀊩; [ "$INFO" -lt 66 ] && icon=􀊥; [ "$INFO" -lt 33 ] && icon=􀊡; [ "$INFO" -eq 0 ] && icon=􀊣
-sketchybar --set "$NAME" icon="$icon" label="$INFO%"
+skylandbar --set "$NAME" icon="$icon" label="$INFO%"
 '''
 subscribe = "volume_change"
 hover = { background.color = "${hover}", background.drawing = true }
@@ -119,7 +119,7 @@ position = "popup.island"
 icon = "􀉉"
 label = { string = "", font = "${font}:Semibold:15" }
 update_freq = 30
-script = 'sketchybar --set "$NAME" label="$(date "+%A %d %B  %H:%M")"'
+script = 'skylandbar --set "$NAME" label="$(date "+%A %d %B  %H:%M")"'
 subscribe = "notch_open"
 
 [[item]]
@@ -129,6 +129,6 @@ icon = "􀑪"
 label = { string = "Nothing playing", color = "${secondary}", max_chars = 48 }
 scroll_texts = true
 script = '''
-[ "$SENDER" = media_change ] && sketchybar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
+[ "$SENDER" = media_change ] && skylandbar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
 '''
 subscribe = "media_change"

@@ -5,7 +5,7 @@ Entrée, puis retirent leurs items (aussi avec `q` ou Ctrl-C).
 
 ```sh
 swift build -c release
-.build/release/skylandbar --config ~/.config/sketchybar/sketchybarrc &
+.build/release/skylandbar &          # ta config ~/.config/skylandbar/skylandbar.toml
 bash manual-tests/01-core.sh        # puis 02, 03...
 ```
 
@@ -24,7 +24,7 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `08-skyland.sh` | événements skyland natifs, workspaces poussés par skyland |
 | `09-displays.sh` | `display=active` (fenêtre focus), `display=2`, `hidden=current` (2 écrans) |
 | `10-texts-scripts.sh` | `scroll_texts`, `update_freq`, `when_shown`, `--reload`, `--exit` |
-| `11-mach-lua.sh` | le CLI sketchybar et SbarLua par Mach, `--service install` |
+| `11-mach-lua.sh` | compatibilité : le CLI `sketchybar` et SbarLua par Mach, `--service install` |
 | `12-workspaces.sh` | composants natifs : workspaces (états, clic, molette, animation) et titre |
 | `13-perf.sh` | CPU et mémoire : repos, pluie de `--set`, animation continue |
 | `14-notch.sh` | l'encoche façon boringNotch : survol, animation, contenu, script, `fake` |

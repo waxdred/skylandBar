@@ -1,6 +1,6 @@
 import Foundation
 
-/// A color as sketchybar writes it: 0xAARRGGBB (also accepted: 0xRRGGBB, #RRGGBB, #AARRGGBB).
+/// A color: 0xAARRGGBB (also accepted: 0xRRGGBB, #RRGGBB, #AARRGGBB).
 public struct ARGB: Equatable, Hashable, CustomStringConvertible {
     public var value: UInt32
 
@@ -28,7 +28,7 @@ public struct ARGB: Equatable, Hashable, CustomStringConvertible {
         return ARGB(hex.count == 6 ? 0xFF00_0000 | value : value)
     }
 
-    /// The same color with another opacity (0...1): sketchybar's `color.alpha=0.5`.
+    /// The same color with another opacity (0...1): `color.alpha=0.5`.
     public func withAlpha(_ alpha: Double) -> ARGB {
         let a = UInt32((min(1, max(0, alpha)) * 255).rounded())
         return ARGB(a << 24 | value & 0x00FF_FFFF)
@@ -52,7 +52,7 @@ public struct ARGB: Equatable, Hashable, CustomStringConvertible {
 /// From `a` (t = 0) to `b` (t = 1).
 public func mix(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
 
-/// A font as sketchybar writes it: "Family:Style:Size", e.g. "Hack Nerd Font:Bold:14.0".
+/// A font: "Family:Style:Size", e.g. "Hack Nerd Font:Bold:14.0".
 public struct FontSpec: Equatable, Hashable, CustomStringConvertible {
     public var family: String
     public var style: String
@@ -64,7 +64,7 @@ public struct FontSpec: Equatable, Hashable, CustomStringConvertible {
         self.size = size
     }
 
-    /// sketchybar's default font
+    /// the default font
     public static let standard = FontSpec(family: "Hack Nerd Font", style: "Bold", size: 14)
 
     /// "Family:Style:Size"; a part left empty keeps the current one.

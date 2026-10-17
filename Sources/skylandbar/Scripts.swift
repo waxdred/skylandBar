@@ -1,9 +1,8 @@
 import Foundation
 import SkylandBarCore
 
-/// Runs item scripts and the config like sketchybar: `bash -c`, with NAME, SENDER, INFO...
-/// and a PATH whose first directory has a `sketchybar` that is this binary, so configs and
-/// plugins written for sketchybar talk to skylandbar unchanged.
+/// Runs item scripts and the config: `bash -c`, with NAME, SENDER, INFO... and a PATH whose
+/// first directory has `skylandbar`, and `sketchybar` for compatibility, both this binary.
 final class ScriptRunner {
     var configDir: String
     /// what scripts (SbarLua above all) look the bar up by: git.felix.<barName>

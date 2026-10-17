@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Le CLI sketchybar et SbarLua parlent à skylandbar par Mach (sketchybar arrêté)
+# Compatibilité : le CLI sketchybar et SbarLua parlent à skylandbar par Mach (SketchyBar arrêté)
 source "$(dirname "$0")/lib.sh"
 
 SB=$(command -v /opt/homebrew/bin/sketchybar /usr/local/bin/sketchybar | head -1)
@@ -16,8 +16,8 @@ step "--query par Mach" "un JSON s'affiche ci-dessus"
 "$SB" --set t.mach nope=1; echo "code de sortie : $?"
 step "Erreur par Mach" "un message [!] et un code de sortie 1"
 
-echo "SbarLua (si installé) : mets une config Lua dans ~/.config/sketchybar puis :"
-echo "  $B --reload"
+echo "SbarLua (si installé) : charge une config Lua :"
+echo "  $B --reload <fichier.lua>"
 step "Config Lua" "les items de la config Lua apparaissent" "leurs callbacks (subscribe) réagissent : changer d'app, cliquer..." \
     "un 2e --reload ne double pas les items ni les callbacks"
 

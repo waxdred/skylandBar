@@ -1,7 +1,7 @@
 import Foundation
 
 /// `skylandbar --service install|uninstall`: a launch agent that starts the bar at login and
-/// again if it crashes (not after `--exit`), like `brew services start sketchybar`.
+/// again if it crashes (not after `--exit`).
 enum Service {
     static let label = "com.waxdred.skylandbar"
     static var plist: String { NSHomeDirectory() + "/Library/LaunchAgents/\(label).plist" }

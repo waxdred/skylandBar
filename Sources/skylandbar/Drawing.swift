@@ -2,14 +2,14 @@ import AppKit
 import SkylandBarCore
 
 // The bar and popup windows and how items are drawn: background, icon, graph / slider /
-// alias, label, each with sketchybar's paddings, offsets, fonts, colors, borders, shadows
+// alias, label, each with its paddings, offsets, fonts, colors, borders, shadows
 // and images; Liquid Glass behind the backgrounds that ask for it.
 
 enum Fonts {
     private static var cache: [FontSpec: NSFont] = [:]
 
-    /// "Hack Nerd Font:Bold:14.0": CoreText's match for that family and style, as sketchybar
-    /// does (a missing family gives CoreText's fallback, Helvetica, there too). "SF Pro" not
+    /// "Hack Nerd Font:Bold:14.0": CoreText's match for that family and style (a missing
+    /// family gives CoreText's fallback, Helvetica). "SF Pro" not
     /// installed as a font is the system font, the same face with SF Symbols' glyphs.
     static func font(_ spec: FontSpec) -> NSFont {
         if let font = cache[spec] { return font }
@@ -65,12 +65,12 @@ enum Fonts {
     /// The width a text takes, without its paddings.
     static func width(_ text: TextProps) -> Double { width(text.shown, font(text.font)) }
 
-    /// sketchybar's: the glyphs' drawn width plus about a pixel, not the advance (Nerd Font
+    /// the glyphs' drawn width plus about a pixel, not the advance (Nerd Font
     /// icons draw wider than they advance); 1 for no string, as there
     static func width(_ string: String, _ font: NSFont) -> Double { metrics(string, font).width }
 
     /// How far the baseline goes below the middle: half the line's ascent minus its descent,
-    /// rounded up (sketchybar's, on its y-up bar)
+    /// rounded up (on a y-up bar)
     static func baselineOffset(_ string: String, _ font: NSFont) -> Double { metrics(string, font).baseline }
 
     private struct MetricsKey: Hashable {
@@ -536,7 +536,7 @@ final class BarView: NSView {
         onScroll?(item(at: event), Double(event.scrollingDeltaY), Self.modifier(event.modifierFlags))
     }
 
-    /// sketchybar's MODIFIER: shift, ctrl, alt, cmd or none
+    /// MODIFIER: shift, ctrl, alt, cmd or none
     static func modifier(_ flags: NSEvent.ModifierFlags) -> String {
         if flags.contains(.shift) { return "shift" }
         if flags.contains(.control) { return "ctrl" }

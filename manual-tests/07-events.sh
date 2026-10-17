@@ -21,6 +21,6 @@ step "Événements" \
 "$B" --add item t.mouse center --set t.mouse label="souris ?" script="$SHOW" --subscribe t.mouse mouse.entered mouse.exited mouse.clicked mouse.scrolled
 step "Souris" "survol → mouse.entered / mouse.exited" "clic gauche / droit → mouse.clicked (BUTTON)" "molette → mouse.scrolled"
 
-"$B" --add event t_custom --add item t.custom center --set t.custom script='sketchybar --set $NAME label="custom $FOO"' --subscribe t.custom t_custom
+"$B" --add event t_custom --add item t.custom center --set t.custom script='skylandbar --set $NAME label="custom $FOO"' --subscribe t.custom t_custom
 "$B" --trigger t_custom FOO=ok
 step "Événement custom" "le label affiche « custom ok »"

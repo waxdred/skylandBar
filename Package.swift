@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         // commands, properties, model, layout: no AppKit, unit tested
         .target(name: "SkylandBarCore"),
-        // sketchybar's Mach messages (its CLI, SbarLua), in C like sketchybar's own
+        // Mach messages of the `sketchybar` CLI and SbarLua (compatibility), in C
         .target(name: "SkylandMach"),
         // the bar: socket server and client, windows, drawing, events, scripts
         .executableTarget(

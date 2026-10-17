@@ -2,7 +2,7 @@ import AppKit
 import ScreenCaptureKit
 
 /// Menu bar items (the windows of the status layer), which `--add alias` copies onto the
-/// bar. Their names need Screen Recording, like sketchybar's aliases.
+/// bar. Their names need Screen Recording.
 enum MenuItems {
     struct Entry {
         let owner: String

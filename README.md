@@ -1,24 +1,17 @@
 # skylandbar
 
-A status bar for macOS that speaks [SketchyBar](https://github.com/FelixKratz/SketchyBar)'s
-language, written in Swift for macOS 14 to 26, and meant to grow into the bar of
-[skyland](https://github.com/waxdred/skyland).
-
-Configs and plugins written for SketchyBar run unchanged: scripts are started with a `PATH`
-whose first directory holds a `sketchybar` that is this binary.
+A status bar for macOS, written in Swift for macOS 14 to 26: the bar of
+[skyland](https://github.com/waxdred/skyland). It is set up by a TOML file, or by
+`skylandbar --add/--set ...` commands from a shell or a script.
 
 ## Build and run
 
 ```sh
 swift build -c release
 swift test
-.build/release/skylandbar                    # runs ~/.config/skylandbar/skylandbarrc,
-                                             # else ~/.config/sketchybar/sketchybarrc
-.build/release/skylandbar --config ~/.config/sketchybar/sketchybarrc
+.build/release/skylandbar                    # ~/.config/skylandbar/skylandbar.toml, else skylandbarrc
+.build/release/skylandbar --config path/to/skylandbar.toml
 ```
-
-Quit SketchyBar first (`brew services stop sketchybar`). Both bars can run at once,
-but each one draws its own bar.
 
 From a shell, or from your scripts:
 
@@ -29,9 +22,9 @@ skylandbar --query bar
 
 ## Configuration: skylandbar.toml
 
-skylandbar reads, in this order: `~/.config/skylandbar/skylandbar.toml`, then
-`~/.config/skylandbar/skylandbarrc`, then `~/.config/sketchybar/sketchybarrc` (or the file given to
-`--config`). A `.toml` file is skylandbar's own; the others are run as sketchybar configs.
+skylandbar reads `~/.config/skylandbar/skylandbar.toml`, else `~/.config/skylandbar/skylandbarrc`
+(or the file given to `--config`). A `.toml` file is read by the bar; any other file is a script,
+run with bash, that sends `skylandbar` commands.
 
 ```toml
 hotload = true                       # reload when the file is saved (keys before any [section])
@@ -54,7 +47,7 @@ name = "theme_changed"
 name = "clock"
 position = "right"
 update_freq = 10
-script = 'sketchybar --set "$NAME" label="$(date +%H:%M)"'
+script = 'skylandbar --set "$NAME" label="$(date +%H:%M)"'
 subscribe = "system_woke"
 background = { color = "${accent}", corner_radius = 8 }
 
@@ -65,15 +58,15 @@ position = "left"
 focused = { icon.color = "${accent}" }
 ```
 
-Each `[[item]]` becomes the `--add` / `--set` / `--subscribe` a sketchybarrc would send, so the keys
-are sketchybar's property names, and tables give dotted keys. Graphs and sliders take their width
+Each `[[item]]` becomes the `--add` / `--set` / `--subscribe` commands a script would send, so the
+keys are the property names below, and tables give dotted keys. Graphs and sliders take their width
 from `graph.width` / `slider.width`, and brackets take `members = [...]`. A multi-line script goes
 in `'''...'''`. `exec = [...]` (before any section) runs commands once the file is loaded.
 An inline table `{ ... }` stays on one line. `examples/skylandbar.toml` is a full bar
 (workspaces, title, clock, battery, volume, notch).
 
 ```sh
-skylandbar --export > ~/.config/skylandbar/skylandbar.toml   # the running bar (your sketchybarrc) as TOML
+skylandbar --export > ~/.config/skylandbar/skylandbar.toml   # the running bar (a script config) as TOML
 skylandbar --check                                           # check the file without touching the bar
 ```
 
@@ -141,7 +134,7 @@ What makes this possible, for any config:
 - `hover.<property>` on any item, a workspaces component too: its look while the mouse is on it.
 - `corner_radius = "concentric"`, `glass_spacing`, and capsules for glass.
 - A bracket spans its members with the first one's `background.padding_left` and the last
-  one's `background.padding_right` (as in sketchybar), then its own `background.padding_left/right`
+  one's `background.padding_right`, then its own `background.padding_left/right`
   outward: room at a group's ends only, so a selection keeps off the glass's edge.
 - `vars_file = "~/.cache/skyland/theme.env"` (before any section): its `NAME=value` lines are vars
   over every `[vars]`; the config loads again when the file changes. The Liquid Glass theme
@@ -158,15 +151,15 @@ What makes this possible, for any config:
 | Bar | `position` top/bottom, `height`, `notch_display_height`, `margin`, `y_offset`, `color`, `border_color/width`, `corner_radius`, `blur_radius`, `padding_left/right`, `notch_width`, `notch_offset`, `display` (all/main/list), `hidden` (on/off/current/toggle), `topmost` (on/window/off), `sticky`, `shadow`, `font_smoothing` |
 | Items | `position` left/right/center/q/e/`popup.<item>`, `drawing`, `width` (dynamic or fixed), `y_offset`, `display` (active: the focused window's display, or a list), `space` (Mission Control spaces), `ignore_association`, `updates` (on/off/when_shown), `update_freq`, `script`, `click_script`, `scroll_texts`, `background.*` |
 | Text | `icon` and `label`: string, `font` (`Family:Style:Size`), `color` (+ `.alpha`), `highlight`, `highlight_color`, `padding_left/right`, `y_offset`, `width`, `align`, `max_chars`, `scroll_duration`, `drawing`, `background.*`, `shadow.*` |
-| Backgrounds | `color`, `border_color/width`, `height`, `corner_radius`, `padding_left/right`, `x_offset`, `y_offset`, `clip`, `shadow.*`, `image` (a file, `app.<bundle id or name>`, `media.artwork`) with `image.scale/corner_radius/border_*/padding_*/y_offset/shadow`. Like sketchybar, setting a color, a border or an image draws the background |
+| Backgrounds | `color`, `border_color/width`, `height`, `corner_radius`, `padding_left/right`, `x_offset`, `y_offset`, `clip`, `shadow.*`, `image` (a file, `app.<bundle id or name>`, `media.artwork`) with `image.scale/corner_radius/border_*/padding_*/y_offset/shadow`. Setting a color, a border or an image draws the background |
 | Popups | `popup.drawing` (+ toggle), `horizontal`, `align`, `height`, `y_offset`, `topmost`, `blur_radius`, `background.*`; popups of popup items |
 | Components | brackets (`--add bracket <name> <member or /regex/>...`), graphs (`--push`, `graph.color/fill_color/line_width`), sliders (`slider.percentage/width/highlight_color/background.*/knob.*`, dragging sends `mouse.clicked` with `PERCENTAGE`), aliases (`alias.color/scale/update_freq`, clicks go to the real menu bar item), spaces (`SELECTED`, `SID`, `DID`) |
 | Animations | `--animate <curve> <frames>` then `--set`/`--bar`: numbers and colors move along linear, quadratic, tanh, sin, exp or circ at 60 frames a second |
 | Scripts | `NAME`, `SENDER`, `INFO`, `BUTTON`, `MODIFIER`, `SCROLL_DELTA`, `PERCENTAGE`, `SELECTED`, `SID`, `DID`, `CONFIG_DIR`, `BAR_NAME`, plus the variables given to `--trigger`. They stop when the bar quits |
 | Events | `front_app_switched`, `space_change`, `space_windows_change`, `display_change`, `system_woke`, `system_will_sleep`, `power_source_change`, `volume_change`, `brightness_change`, `wifi_change`, `media_change`, `mouse.entered/exited(.global)`, `mouse.clicked`, `mouse.scrolled(.global)`, `routine`, `forced`, custom events (with an optional distributed notification) |
-| Query | JSON close to SketchyBar's, with `bounding_rects` per display |
+| Query | JSON, with `bounding_rects` per display |
 
-## skylandbar extras
+## skyland, the notch and Liquid Glass
 
 - **skyland and AeroSpace events, built in**: skylandbar subscribes to skyland's socket (or
   AeroSpace's) and sends these events as they happen, with nothing in the window manager's config:
@@ -180,11 +173,10 @@ What makes this possible, for any config:
   | `skyland_window_detected` | `WINDOW_ID`, `WORKSPACE`, `APP_NAME`, `APP_BUNDLE_ID` |
   | `skyland_binding` | `MODE`, `BINDING` |
 
-  `INFO` is the event's JSON. Configs written for AeroSpace and sketchybar that use
+  `INFO` is the event's JSON. Configs written for AeroSpace that use
   `aerospace_workspace_change` work as they are. If the window manager's config also
   triggers it (`exec-on-workspace-change`), remove that line.
-- skyland pushes its workspaces and window title to skylandbar while it runs, and to
-  sketchybar otherwise.
+- skyland pushes its workspaces and window title to skylandbar while it runs.
 - **Windows below the bar**: skylandbar tells skyland the room it takes at the top
   (`height` + `y_offset`, the notch height when a notched display shows it; 0 at the
   bottom or hidden) when it starts, its config changes, or skyland restarts, with
@@ -231,7 +223,7 @@ What makes this possible, for any config:
              --set island notch.width=340 notch.corner_radius=22 notch.animation=tanh notch.animation_frames=18 \
              --add item island.song popup.island \
              --set island.song icon=󰝚 label="Rien en lecture" label.max_chars=40 scroll_texts=on \
-                   script='sketchybar --set $NAME label="$(echo "$INFO" | jq -r ".artist + \" — \" + .title")"' \
+                   script='skylandbar --set $NAME label="$(echo "$INFO" | jq -r ".artist + \" — \" + .title")"' \
              --subscribe island.song media_change \
              --add slider island.volume popup.island 260 \
              --set island.volume icon=󰕾 slider.percentage=50 slider.background.height=5 slider.background.corner_radius=3 \
@@ -268,29 +260,29 @@ What makes this possible, for any config:
 
 - **aliases**: Screen Recording, to copy menu bar items. A click forwarded to a real item also
   needs Accessibility.
-- **wifi_change**: macOS gives the network name only to apps with Location Services, as it does for
-  SketchyBar; otherwise `INFO` is empty.
+- **wifi_change**: macOS gives the network name only to apps with Location Services; otherwise
+  `INFO` is empty.
 - **media_change**: MediaRemote no longer answers apps from macOS 15.4. Music and Spotify still
   report through their notifications, but there is no artwork for them.
 - **space_change**: Mission Control spaces. Workspaces from skyland or AeroSpace come through the
   skyland events above.
-- **sketchybar's Mach name**: only one bar can hold `git.felix.sketchybar`. With sketchybar
-  running, the sketchybar CLI and SbarLua talk to sketchybar (skylandbar says so when it starts).
 
 ## Manual tests
 
 `manual-tests/` holds one script per area, with what to check: see its README.
 
-## SbarLua and the sketchybar CLI
+## Compatibility
 
-skylandbar answers on sketchybar's Mach names (`git.felix.sketchybar` and
-`git.felix.skylandbar`), the way sketchybar's own CLI and [SbarLua](https://github.com/FelixKratz/SbarLua)
-reach the bar. Lua configs run as they are: their events go to the item's `mach_helper` (SbarLua's
-event loop). Calls to `/opt/homebrew/bin/sketchybar` from skyland, AeroSpace or a shell reach
-skylandbar while sketchybar itself is stopped (`brew services stop sketchybar`).
+Tools that talk to a bar by SketchyBar's names reach skylandbar, skyland among them (it pushes
+its workspaces, title and mode with `/opt/homebrew/bin/sketchybar`):
 
-A config that keeps running (SbarLua's event loop) gets its `forced` update 2 seconds after it
-starts. `--reload` stops it before running it again.
+- scripts started by skylandbar find it as `sketchybar` too, first on their `PATH`;
+- skylandbar holds the Mach names `git.felix.skylandbar` and `git.felix.sketchybar`, which the
+  `sketchybar` CLI and [SbarLua](https://github.com/FelixKratz/SbarLua) use. Only one bar can hold
+  the second: while SketchyBar itself runs, they reach it, and skylandbar says so when it starts.
+- Lua configs (SbarLua) run as they are: their events go to the item's `mach_helper`. A config
+  that keeps running gets its `forced` update 2 seconds after it starts; `--reload` stops it
+  before running it again.
 
 ## Start at login
 

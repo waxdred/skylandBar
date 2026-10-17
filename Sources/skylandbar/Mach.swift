@@ -2,8 +2,9 @@ import Foundation
 import SkylandBarCore
 import SkylandMach
 
-/// The bar on sketchybar's Mach names, for the sketchybar CLI and SbarLua: git.felix.skylandbar
-/// always, git.felix.sketchybar too when sketchybar does not run. Each message is handled
+/// The bar on Mach, for the `sketchybar` CLI and SbarLua (compatibility; skyland pushes its
+/// workspaces this way): git.felix.skylandbar always, git.felix.sketchybar too when SketchyBar
+/// itself does not run. Each message is handled
 /// on the main thread, like the socket's, and answered with its output.
 final class MachServer {
     /// the names registered (without git.felix.)

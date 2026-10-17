@@ -1,11 +1,10 @@
 import AppKit
 import SkylandBarCore
 
-// skylandbar: a status bar for macOS that speaks sketchybar's language.
-//   skylandbar                 start the bar (runs ~/.config/skylandbar/skylandbarrc, or
-//                              ~/.config/sketchybar/sketchybarrc)
-//   skylandbar --config <rc>   start the bar with that config
-//   skylandbar --bar ... --add item ... --set ...   talk to the running bar, like sketchybar
+// skylandbar: a status bar for macOS, skyland's.
+//   skylandbar                 start the bar (~/.config/skylandbar/skylandbar.toml, else skylandbarrc)
+//   skylandbar --config <file> start the bar with that config
+//   skylandbar --bar ... --add item ... --set ...   talk to the running bar
 
 let version = "0.11.0"
 let usage = """
@@ -22,9 +21,9 @@ let usage = """
              --push <graph> <value>...        --animate linear|quadratic|tanh|sin|exp|circ <frames>
              --query bar|defaults|events|displays|default_menu_items|<name>
              --update   --reload [<file>]   --hotload on|off   --exit
-    Configs and plugins written for sketchybar work as they are: scripts find this bar as
-    `sketchybar` on their PATH, and the sketchybar CLI and SbarLua reach it on sketchybar's
-    Mach name while sketchybar itself does not run.
+    Its config: ~/.config/skylandbar/skylandbar.toml, else ~/.config/skylandbar/skylandbarrc (a
+    script of skylandbar commands). Tools that use SketchyBar's names reach it too (README,
+    Compatibility).
     """
 
 let arguments = Array(CommandLine.arguments.dropFirst())

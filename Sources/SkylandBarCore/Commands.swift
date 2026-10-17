@@ -11,7 +11,7 @@ public struct Prop: Equatable {
     }
 }
 
-/// One sketchybar command. A message (one `skylandbar ...` call) holds several:
+/// One command. A message (one `skylandbar ...` call) holds several:
 /// `skylandbar --add item clock right --set clock update_freq=10 script="..."`.
 public enum Command: Equatable {
     case bar([Prop])

@@ -60,7 +60,7 @@ final class BarApp {
         }
         mach = MachServer { [unowned self] arguments in self.handle(arguments) }
         mach.start()
-        // SbarLua finds the bar by BAR_NAME: the sketchybar name when we hold it
+        // SbarLua finds the bar by BAR_NAME: the compatibility name when we hold it (Mach.swift)
         scripts.barName = mach.names.first { $0 == "sketchybar" } ?? "skylandbar"
         events.onEvent = { [unowned self] event, info in
             if event == "space_change" { return self.spaceChanged() }
@@ -297,15 +297,14 @@ final class BarApp {
     private var configFile: String? {
         if let configPath { return configPath }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return ["\(home)/.config/skylandbar/skylandbar.toml", "\(home)/.config/skylandbar/skylandbarrc",
-                "\(home)/.config/sketchybar/sketchybarrc"]
+        return ["\(home)/.config/skylandbar/skylandbar.toml", "\(home)/.config/skylandbar/skylandbarrc"]
             .first { FileManager.default.fileExists(atPath: $0) }
     }
 
     /// Runs the config, then every script once (`forced`) unless it sent `--update`.
     private func runConfig() {
         guard let file = configFile else {
-            FileHandle.standardError.write(Data("skylandbar: no config (~/.config/skylandbar/skylandbar.toml, skylandbarrc or ~/.config/sketchybar/sketchybarrc)\n".utf8))
+            FileHandle.standardError.write(Data("skylandbar: no config (~/.config/skylandbar/skylandbar.toml or skylandbarrc)\n".utf8))
             setNeedsLayout()
             return
         }
@@ -314,7 +313,7 @@ final class BarApp {
     }
 
     /// Runs a config, then every script once when it ends, unless the config sent `--update`
-    /// (sketchybar's own forced run: twice would race scripts writing the same files); a
+    /// (its own forced run: twice would race scripts writing the same files); a
     /// config that keeps running (SbarLua's event loop) gets that after 2 seconds.
     private func run(_ file: String) {
         scripts.configDir = (file as NSString).deletingLastPathComponent
@@ -664,7 +663,7 @@ final class BarApp {
     }
 
     /// Each bracket around its members on this bar, behind them, with their outer background
-    /// paddings (sketchybar's: the first one's padding_left, the last one's padding_right),
+    /// paddings (the first one's padding_left, the last one's padding_right),
     /// then its own background paddings outward (skylandbar's: room at a group's ends only)
     private func brackets(around items: [PlacedItem], height: Double) -> [PlacedItem] {
         model.items.filter { $0.kind == "bracket" && $0.props.drawing }.compactMap { bracket in

@@ -31,7 +31,7 @@ final class ValueTests: XCTestCase {
 }
 
 final class ParserTests: XCTestCase {
-    func testSketchybarrcLines() throws {
+    func testScriptConfigLines() throws {
         let commands = try CommandParser.parse([
             "--bar", "position=top", "height=32", "color=0x40000000",
             "--add", "item", "clock", "right",
@@ -150,7 +150,7 @@ final class ModelTests: XCTestCase {
                         "--add", "item", "c", "right"])
         XCTAssertEqual(model.items.map(\.name), ["a", "b", "c"])
         XCTAssertEqual(model.item(named: "a")?.props.icon.color.value, 0xFF00_FF00) // defaults apply to new items
-        let again = send(model, ["--add", "item", "a", "left"]) // already there: a warning, as in sketchybar
+        let again = send(model, ["--add", "item", "a", "left"]) // already there: a warning
         XCTAssertFalse(again.errors.isEmpty)
         XCTAssertFalse(again.failed)
 
@@ -204,7 +204,7 @@ final class ComponentTests: XCTestCase {
         var props = ItemProps()
         XCTAssertFalse(props.background.drawing)
         XCTAssertNil(props.apply("background.color", "0xff112233"))
-        XCTAssertTrue(props.background.drawing) // like sketchybar
+        XCTAssertTrue(props.background.drawing) // a color draws it
         XCTAssertNil(props.apply("background.drawing", "off"))
         XCTAssertNil(props.apply("icon.background.image", "app.com.apple.finder"))
         XCTAssertTrue(props.icon.background.drawing)
@@ -672,7 +672,7 @@ final class ConfigFileTests: XCTestCase {
         name = "clock"
         position = "right"
         update_freq = 10
-        script = "sketchybar --set $NAME label=\\"$(date '+%H:%M')\\""
+        script = "skylandbar --set $NAME label=\\"$(date '+%H:%M')\\""
         subscribe = "system_woke"
         background = { color = "${accent}", corner_radius = 6, drawing = false }
 
@@ -701,7 +701,7 @@ final class ConfigFileTests: XCTestCase {
         XCTAssertEqual(plan.steps[0].arguments, ["--bar", "height=32", "color=0xff1e1e2e", "glass=on"])
         XCTAssertEqual(plan.steps[1].arguments, ["--default", "icon.font=Hack Nerd Font:Bold:14", "label.color=0xffcba6f7", "label.padding_left=4"])
         XCTAssertEqual(plan.steps[3].arguments, ["--add", "item", "clock", "right", "--set", "clock", "update_freq=10",
-                                                 "script=sketchybar --set $NAME label=\"$(date '+%H:%M')\"",
+                                                 "script=skylandbar --set $NAME label=\"$(date '+%H:%M')\"",
                                                  "background.color=0xffcba6f7", "background.corner_radius=6", "background.drawing=off",
                                                  "--subscribe", "clock", "system_woke"])
         XCTAssertEqual(Array(plan.steps[4].arguments.prefix(5)), ["--add", "graph", "cpu", "right", "60"]) // the width goes with --add

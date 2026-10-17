@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-// Messages between `skylandbar --...` (or `sketchybar --...` through the shim) and the
+// Messages between `skylandbar --...` (also as `sketchybar`, Scripts.swift) and the
 // running bar: a Unix socket, the arguments NUL-separated, then the client closes its
 // side; the reply is a status byte ("0" ok, "1" error) and the text to print.
 

@@ -1,7 +1,7 @@
 import Foundation
 
-// The properties of the bar and of its items, with sketchybar's names and defaults
-// (https://felixkratz.github.io/SketchyBar/config/items). Each `apply` takes the part of
+// The properties of the bar and of its items, their names and defaults. Each `apply` takes
+// the part of
 // the key after its own prefix ("background.color" -> background.apply("color", ...)) and
 // returns an error message, or nil when the value was taken.
 
@@ -100,7 +100,7 @@ public struct BackgroundProps: Equatable {
         let (head, rest) = splitKey(key)
         switch head {
             case "drawing": return Value.setBool(&drawing, value)
-            // like sketchybar, giving a background a color, a border or an image draws it
+            // giving a background a color, a border or an image draws it
             case "color": return enable(Value.setColor(&color, value, part: rest))
             case "border_color": return enable(Value.setColor(&borderColor, value, part: rest))
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)

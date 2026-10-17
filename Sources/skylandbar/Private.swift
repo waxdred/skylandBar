@@ -22,7 +22,7 @@ enum Spaces {
     private static let copySpaces: CopyManagedDisplaySpaces? = Private.function("CGSCopyManagedDisplaySpaces", in: Private.skyLight)
 
     /// display (1-based, in the order macOS lists them) -> the space it shows (1-based,
-    /// counted over every display's spaces, like Mission Control and sketchybar)
+    /// counted over every display's spaces, like Mission Control)
     static func current() -> [Int: Int] {
         guard let connection, let copySpaces,
               let displays = copySpaces(connection())?.takeRetainedValue() as? [[String: Any]] else { return [:] }

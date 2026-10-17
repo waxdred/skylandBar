@@ -12,7 +12,7 @@ step "Graphe" "une courbe verte remplie qui défile de droite à gauche" "le rem
 
 "$B" --add slider t.vol right 100 --set t.vol slider.background.height=4 slider.background.color=0x40ffffff slider.background.corner_radius=2 \
         slider.highlight_color=0xffffffff slider.knob=● slider.percentage=50 icon=󰕾 \
-        script='sketchybar --set $NAME label="$PERCENTAGE%"' --subscribe t.vol mouse.clicked
+        script='skylandbar --set $NAME label="$PERCENTAGE%"' --subscribe t.vol mouse.clicked
 step "Slider" "à 50 %, glisse-le à la souris" "le label affiche le pourcentage pendant et après le glissé"
 
 "$B" --animate sin 30 --set t.vol slider.percentage=90

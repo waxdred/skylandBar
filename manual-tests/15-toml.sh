@@ -17,7 +17,7 @@ printf 'height = \n' > "$DIR/broken.toml"; "$B" --check "$DIR/broken.toml"
 step "--check" "l'exemple : ok" "le fichier cassé : « line 1: expected a value », code de sortie 1"
 
 "$B" --reload "$DIR/exported.toml"; sleep 2
-step "Rechargement de l'export" "la barre est identique à ta config sketchybar (mêmes items, couleurs, scripts)"
+step "Rechargement de l'export" "la barre est identique à ta config (mêmes items, couleurs, scripts)"
 
 "$B" --reload "$(cd "$(dirname "$EXAMPLE")" && pwd)/skylandbar.toml"; sleep 2
 step "L'exemple" "barre Catppuccin flottante : workspaces à gauche, titre au centre, heure / batterie / volume à droite" \

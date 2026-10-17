@@ -1,6 +1,6 @@
 # skylandbar.toml: a Catppuccin bar for skyland. Copy it to ~/.config/skylandbar/ and
-# check it with `skylandbar --check`. Property names are sketchybar's
-# (https://felixkratz.github.io/SketchyBar/config/items); a table gives dotted keys:
+# check it with `skylandbar --check`. Property names are the README's
+# (What works); a table gives dotted keys:
 # background = { color = "...", corner_radius = 6 } is background.color and background.corner_radius.
 
 hotload = true # the bar reloads when this file is saved
@@ -61,7 +61,7 @@ name = "clock"
 position = "right"
 icon = "󰥔"
 update_freq = 10
-script = 'sketchybar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"'
+script = 'skylandbar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"'
 subscribe = "system_woke"
 background.drawing = true
 
@@ -73,7 +73,7 @@ script = '''
 percent=$(pmset -g batt | grep -Eo "[0-9]+%" | tr -d %)
 charging=$(pmset -g batt | grep -q "AC Power" && echo 1)
 icon=󰁹; [ "$percent" -lt 60 ] && icon=󰁿; [ "$percent" -lt 25 ] && icon=󰁻; [ -n "$charging" ] && icon=󰂄
-sketchybar --set "$NAME" icon="$icon" label="$percent%"
+skylandbar --set "$NAME" icon="$icon" label="$percent%"
 '''
 subscribe = ["power_source_change", "system_woke"]
 
@@ -81,7 +81,7 @@ subscribe = ["power_source_change", "system_woke"]
 name = "volume"
 position = "right"
 script = '''
-[ "$SENDER" = volume_change ] && sketchybar --set "$NAME" label="$INFO%"
+[ "$SENDER" = volume_change ] && skylandbar --set "$NAME" label="$INFO%"
 '''
 subscribe = "volume_change"
 
@@ -105,7 +105,7 @@ icon = "󰝚"
 label = { string = "Nothing playing", max_chars = 40 }
 scroll_texts = true
 script = '''
-sketchybar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
+skylandbar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
 '''
 subscribe = "media_change"
 

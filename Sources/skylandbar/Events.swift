@@ -4,7 +4,7 @@ import CoreAudio
 import CoreWLAN
 import IOKit.ps
 
-// sketchybar's system events: front_app_switched, space_change, display_change,
+// The system events: front_app_switched, space_change, display_change,
 // system_woke, system_will_sleep, power_source_change, volume_change, wifi_change,
 // brightness_change, media_change, and the custom events tied to a distributed
 // notification (--add event <name> <notification>).
@@ -120,7 +120,7 @@ final class SystemEvents {
 }
 
 // MARK: wifi_change: INFO = the network's name ("" when macOS keeps it from apps without
-// Location Services, like sketchybar)
+// Location Services)
 
 final class WifiWatcher: NSObject, CWEventDelegate {
     var onChange: ((String) -> Void)?

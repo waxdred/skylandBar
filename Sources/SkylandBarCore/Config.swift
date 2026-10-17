@@ -1,7 +1,7 @@
 import Foundation
 
 // skylandbar.toml: the bar as a file instead of a script. Each part becomes the commands a
-// sketchybarrc would send (--bar, --default, --add, --set, --subscribe), so a property
+// script config would send (--bar, --default, --add, --set, --subscribe), so a property
 // means the same in both, and `ConfigExport` writes a running bar back as such a file.
 //
 //   hotload = true              --hotload on        (these two first: after a [section],
@@ -26,7 +26,7 @@ import Foundation
 //   name = "clock"              slider, bracket (members = [...]), workspaces, title, notch
 //   position = "right"
 //   update_freq = 10
-//   script = "sketchybar --set $NAME label=\"$(date '+%H:%M')\""
+//   script = "skylandbar --set $NAME label=\"$(date '+%H:%M')\""
 //   subscribe = ["system_woke"]
 //   background = { color = "${accent}", corner_radius = 6 }   tables give dotted keys
 

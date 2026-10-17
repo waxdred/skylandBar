@@ -1,6 +1,6 @@
 import Foundation
 
-/// sketchybar's Mach messages, as its CLI and SbarLua send them: the arguments, each ended
+/// The Mach messages the `sketchybar` CLI and SbarLua send (compatibility): the arguments, each ended
 /// by a NUL, and one more NUL. Events go to a mach_helper as the variables, the same way:
 /// "NAME\0clock\0SENDER\0routine\0\0".
 public enum Wire {

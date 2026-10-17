@@ -34,7 +34,7 @@ public struct ScriptRun: Equatable {
 /// What a message did, for the app to carry out.
 public struct Outcome: Equatable {
     public var output = ""
-    /// "[!]" errors fail the call, "[?]" warnings do not (sketchybar's exit status)
+    /// "[!]" errors fail the call (exit status 1), "[?]" warnings do not
     public var errors: [String] = []
     public var failed: Bool { errors.contains { $0.hasPrefix("[!]") } }
     public var scripts: [ScriptRun] = []
@@ -57,7 +57,7 @@ public struct Outcome: Equatable {
     public var exit = false
 }
 
-/// sketchybar's built-in events
+/// The built-in events
 public let builtinEvents = [
     "front_app_switched", "space_change", "space_windows_change", "display_change", "volume_change",
     "brightness_change", "power_source_change", "wifi_change", "media_change", "system_will_sleep", "system_woke",
@@ -66,7 +66,7 @@ public let builtinEvents = [
 ] + skylandEvents
 
 /// The events skylandbar sends from skyland's (or AeroSpace's) `subscribe`, with their
-/// variables. The aerospace_ names are the ones sketchybar configs for AeroSpace already use
+/// variables. The aerospace_ names are the ones bar configs for AeroSpace already use
 /// (`exec-on-workspace-change`), so they work without it.
 public let skylandEvents = [
     "skyland_workspace_change", // FOCUSED_WORKSPACE, PREV_WORKSPACE
@@ -168,7 +168,7 @@ public final class BarModel {
         return items.indices.filter { items[$0].name == target }
     }
 
-    /// a /regex/ matching nothing is only a warning, like in sketchybar
+    /// a /regex/ matching nothing is only a warning
     private func noMatch(_ command: String, _ target: String) -> String {
         target.count > 2 && target.hasPrefix("/") && target.hasSuffix("/")
             ? "[?] \(command): no match for \(target)" : "[!] \(command): no item '\(target)'"
