@@ -76,6 +76,7 @@ glass_saturation = 1.6
 glass_lens_response = 0.35 # seconds; 0: it jumps
 glass_lens_bounce = 0.3    # overshoot, 0 to 1
 glass_lens_stretch = 1     # 0: no stretch
+motion = "auto"            # follows Reduce Motion; "full" animates even with it
 font_smoothing = false
 
 [defaults]

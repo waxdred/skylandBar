@@ -562,6 +562,9 @@ public struct BarProps: Equatable {
     public var glassLensResponse = 0.35
     public var glassLensBounce = 0.3
     public var glassLensStretch = 1.0
+    /// skylandbar's animations: auto (none with macOS's Reduce Motion), full (always),
+    /// reduced (never)
+    public var motion = "auto"
 
     public init() {}
 
@@ -583,6 +586,7 @@ public struct BarProps: Equatable {
                 glassLensBounce = min(1, bounce)
                 return nil
             case "glass_lens_stretch": return Value.setNumber(&glassLensStretch, value, minimum: 0)
+            case "motion": return Value.oneOf(&motion, value, ["auto", "full", "reduced"])
             case "position": return Value.oneOf(&position, value, ["top", "bottom"])
             case "height": return Value.setNumber(&height, value, minimum: 0)
             case "notch_display_height": return Value.setNumber(&notchDisplayHeight, value, minimum: 0)
@@ -644,7 +648,7 @@ public struct BarProps: Equatable {
             "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
             "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass, "glass_spacing": glassSpacing,
             "glass_engine": glassEngine, "glass_refraction": glassRefraction, "glass_blur": glassBlur, "glass_saturation": glassSaturation,
-            "glass_lens_response": glassLensResponse, "glass_lens_bounce": glassLensBounce, "glass_lens_stretch": glassLensStretch,
+            "glass_lens_response": glassLensResponse, "glass_lens_bounce": glassLensBounce, "glass_lens_stretch": glassLensStretch, "motion": motion,
         ]
     }
 }

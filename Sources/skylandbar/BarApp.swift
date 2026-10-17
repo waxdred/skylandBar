@@ -141,7 +141,10 @@ final class BarApp {
         if outcome.exit { return quit() }
         if outcome.reload { return reload(outcome.reloadPath) }
         if let on = outcome.hotload { setHotload(on) }
-        if outcome.barChanged { configureWindows() }
+        if outcome.barChanged {
+            updateMotion()
+            configureWindows()
+        }
         if outcome.eventsChanged {
             events.observeCustom(model.events)
             watchSpaceWindows()
@@ -166,12 +169,12 @@ final class BarApp {
     /// appearance_change event (INFO dark or light, APPEARANCE in scripts), and loads a TOML
     /// config with [vars.dark] / [vars.light] again.
     private func watchAccessibilityAndAppearance() {
-        model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        updateMotion()
         scripts.appearance = Self.appearance
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                           object: nil, queue: .main)
         { [unowned self] _ in
-            self.model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            self.updateMotion()
             self.setNeedsLayout()
         }
         DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
@@ -677,6 +680,15 @@ final class BarApp {
         window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing))
         window.updateGlass(glassSettings(bar))
         window.panel.orderFrontRegardless()
+    }
+
+    /// Animations or not: the bar's `motion`, and with `auto` macOS's Reduce Motion.
+    private func updateMotion() {
+        switch model.bar.motion {
+            case "full": model.reduceMotion = false
+            case "reduced": model.reduceMotion = true
+            default: model.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        }
     }
 
     private func glassSettings(_ bar: BarProps) -> GlassSettings {

@@ -125,6 +125,10 @@ its new item on a spring, as Apple's tab bars do: `glass_lens_response` (seconds
 `glass_lens_bounce` (overshoot, 0 to 1, 0.3), `glass_lens_stretch` (how much it stretches along
 its way, like a drop; 0: none). A lens that appears grows out of 70 %. Reduce Motion: no slide.
 
+`motion` on the bar decides for all of skylandbar's animations (lenses, `--animate`, workspaces,
+hover, the notch): `auto` (the default) follows macOS's Reduce Motion, `full` animates anyway,
+`reduced` never does.
+
 What makes this possible, for any config:
 
 - `include = "themes/x.toml"` (before any section, relative to the config's folder): a theme's
