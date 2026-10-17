@@ -27,11 +27,64 @@ skylandbar --set clock label="$(date '+%H:%M')"
 skylandbar --query bar
 ```
 
+## Configuration: skylandbar.toml
+
+skylandbar reads, in this order: `~/.config/skylandbar/skylandbar.toml`, then
+`~/.config/skylandbar/skylandbarrc`, then `~/.config/sketchybar/sketchybarrc` (or the file given to
+`--config`). A `.toml` file is skylandbar's own; the others are run as sketchybar configs.
+
+```toml
+hotload = true                       # reload when the file is saved (keys before any [section])
+
+[vars]                               # ${name} in any string, then the environment (${HOME})
+accent = "0xffcba6f7"
+
+[bar]
+height = 34
+corner_radius = 12
+color = 0xcc1e1e2e                   # a hex integer for a *color key is a color
+
+[defaults]
+icon = { font = "Hack Nerd Font:Bold:15", padding_left = 6 }
+
+[[event]]
+name = "theme_changed"
+
+[[item]]                             # in bar order
+name = "clock"
+position = "right"
+update_freq = 10
+script = 'sketchybar --set "$NAME" label="$(date +%H:%M)"'
+subscribe = "system_woke"
+background = { color = "${accent}", corner_radius = 8 }
+
+[[item]]
+type = "workspaces"                  # item (default), space, alias, graph, slider, bracket,
+name = "ws"                          # workspaces, title, notch
+position = "left"
+focused = { icon.color = "${accent}" }
+```
+
+Each `[[item]]` becomes the `--add` / `--set` / `--subscribe` a sketchybarrc would send, so the keys
+are sketchybar's property names, and tables give dotted keys. Graphs and sliders take their width
+from `graph.width` / `slider.width`, and brackets take `members = [...]`. A multi-line script goes
+in `'''...'''`. `exec = [...]` (before any section) runs commands once the file is loaded.
+An inline table `{ ... }` stays on one line. `examples/skylandbar.toml` is a full bar
+(workspaces, title, clock, battery, volume, notch).
+
+```sh
+skylandbar --export > ~/.config/skylandbar/skylandbar.toml   # the running bar (your sketchybarrc) as TOML
+skylandbar --check                                           # check the file without touching the bar
+```
+
+`--export` writes what each item has that differs from the defaults, with the scripts as they are
+and the labels as they are now.
+
 ## What works
 
 | Area | Supported |
 | --- | --- |
-| Commands | `--bar`, `--add item/event/bracket/graph/slider/alias/space`, `--set` (name or `/regex/`), `--default`, `--subscribe`, `--trigger` (with `VAR=value`), `--remove`, `--move before/after`, `--reorder`, `--rename`, `--clone`, `--push`, `--animate`, `--query bar/defaults/events/displays/default_menu_items/<item>`, `--update`, `--reload [file]`, `--hotload on/off`, `--exit` |
+| Commands | `--bar`, `--add item/event/bracket/graph/slider/alias/space/workspaces/title/notch`, `--set` (name or `/regex/`), `--default`, `--subscribe`, `--trigger` (with `VAR=value`), `--remove`, `--move before/after`, `--reorder`, `--rename`, `--clone`, `--push`, `--animate`, `--query bar/defaults/events/displays/default_menu_items/config/<item>`, `--update`, `--reload [file]`, `--hotload on/off`, `--exit` |
 | Bar | `position` top/bottom, `height`, `notch_display_height`, `margin`, `y_offset`, `color`, `border_color/width`, `corner_radius`, `blur_radius`, `padding_left/right`, `notch_width`, `notch_offset`, `display` (all/main/list), `hidden` (on/off/current/toggle), `topmost` (on/window/off), `sticky`, `shadow`, `font_smoothing` |
 | Items | `position` left/right/center/q/e/`popup.<item>`, `drawing`, `width` (dynamic or fixed), `y_offset`, `display` (active: the focused window's display, or a list), `space` (Mission Control spaces), `ignore_association`, `updates` (on/off/when_shown), `update_freq`, `script`, `click_script`, `scroll_texts`, `background.*` |
 | Text | `icon` and `label`: string, `font` (`Family:Style:Size`), `color` (+ `.alpha`), `highlight`, `highlight_color`, `padding_left/right`, `y_offset`, `width`, `align`, `max_chars`, `scroll_duration`, `drawing`, `background.*`, `shadow.*` |

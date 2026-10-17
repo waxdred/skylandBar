@@ -1,0 +1,123 @@
+# skylandbar.toml: a Catppuccin bar for skyland. Copy it to ~/.config/skylandbar/ and
+# check it with `skylandbar --check`. Property names are sketchybar's
+# (https://felixkratz.github.io/SketchyBar/config/items); a table gives dotted keys:
+# background = { color = "...", corner_radius = 6 } is background.color and background.corner_radius.
+
+hotload = true # the bar reloads when this file is saved
+
+[vars] # ${name} in any string; the environment too (${HOME}, ${CONFIG_DIR})
+base = "0xff1e1e2e"
+surface = "0xff313244"
+overlay = "0xff45475a"
+text = "0xffcdd6f4"
+dim = "0xff6c7086"
+accent = "0xffcba6f7"
+green = "0xffa6e3a1"
+
+[bar]
+position = "top"
+height = 34
+margin = 8
+y_offset = 4
+corner_radius = 12
+color = "0xcc1e1e2e"
+blur_radius = 30
+padding_left = 6
+padding_right = 6
+shadow = true
+
+[defaults]
+icon = { font = "Hack Nerd Font:Bold:15", color = "${text}", padding_left = 6, padding_right = 4 }
+label = { font = "SF Pro:Semibold:13", color = "${text}", padding_right = 8 }
+background = { color = "${surface}", corner_radius = 8, height = 24, padding_left = 3, padding_right = 3, drawing = false }
+
+# --- left: skyland's workspaces, no script --------------------------------------------
+
+[[item]]
+type = "workspaces"
+name = "ws"
+position = "left"
+icon.color = "${dim}"
+label = { string = "{apps}", font = "SF Pro:Medium:11", color = "${dim}" }
+background.drawing = true
+focused = { icon.color = "${accent}", label.color = "${text}", background.color = "${overlay}", y_offset = 1 }
+empty = { label.string = "", label.padding_right = 2 }
+workspaces = { animation = "tanh", animation_frames = 12 }
+
+# --- center: the focused window ----------------------------------------------------------
+
+[[item]]
+type = "title"
+name = "window"
+position = "center"
+title = { app_icon = "on", format = "app_title" }
+label.max_chars = 60
+icon.background.image.scale = 0.5
+
+# --- right: clock, battery, volume ---------------------------------------------------------
+
+[[item]]
+name = "clock"
+position = "right"
+icon = "󰥔"
+update_freq = 10
+script = 'sketchybar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"'
+subscribe = "system_woke"
+background.drawing = true
+
+[[item]]
+name = "battery"
+position = "right"
+update_freq = 120
+script = '''
+percent=$(pmset -g batt | grep -Eo "[0-9]+%" | tr -d %)
+charging=$(pmset -g batt | grep -q "AC Power" && echo 1)
+icon=󰁹; [ "$percent" -lt 60 ] && icon=󰁿; [ "$percent" -lt 25 ] && icon=󰁻; [ -n "$charging" ] && icon=󰂄
+sketchybar --set "$NAME" icon="$icon" label="$percent%"
+'''
+subscribe = ["power_source_change", "system_woke"]
+
+[[item]]
+name = "volume"
+position = "right"
+script = '''
+[ "$SENDER" = volume_change ] && sketchybar --set "$NAME" label="$INFO%"
+'''
+subscribe = "volume_change"
+
+[[item]]
+type = "bracket"
+name = "status"
+members = ["battery", "volume"]
+background = { color = "${surface}", corner_radius = 8, height = 24 }
+
+# --- the notch: now playing and volume, boringNotch style ------------------------------------
+
+[[item]]
+type = "notch"
+name = "island"
+notch = { width = 340, corner_radius = 22, animation = "tanh", animation_frames = 18 }
+
+[[item]]
+name = "island.song"
+position = "popup.island"
+icon = "󰝚"
+label = { string = "Nothing playing", max_chars = 40 }
+scroll_texts = true
+script = '''
+sketchybar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
+'''
+subscribe = "media_change"
+
+[[item]]
+type = "slider"
+name = "island.volume"
+position = "popup.island"
+icon = "󰕾"
+slider.width = 260
+slider.percentage = 50
+slider.highlight_color = "${green}"
+slider.knob = "●"
+slider.background = { height = 5, corner_radius = 3, color = "${overlay}" }
+script = 'osascript -e "set volume output volume $PERCENTAGE"'
+subscribe = "mouse.clicked"

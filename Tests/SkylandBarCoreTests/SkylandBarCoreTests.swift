@@ -544,3 +544,207 @@ final class NotchTests: XCTestCase {
         XCTAssertEqual(model.scripts(for: "notch_open").map(\.item), ["fan"]) // built in, no --add event
     }
 }
+
+final class TOMLTests: XCTestCase {
+    private func table(_ text: String, file: StaticString = #filePath, line: UInt = #line) -> TOMLTable? {
+        switch TOML.parse(text) {
+            case .success(let table): return table
+            case .failure(let error):
+                XCTFail("\(error)", file: file, line: line)
+                return nil
+        }
+    }
+
+    private func string(_ value: TOMLValue?) -> String? { if case .string(let s)? = value { return s } else { return nil } }
+    private func int(_ value: TOMLValue?) -> Int64? { if case .integer(let i)? = value { return i } else { return nil } }
+    private func sub(_ value: TOMLValue?) -> TOMLTable? { if case .table(let t)? = value { return t } else { return nil } }
+
+    func testValues() throws {
+        let root = try XCTUnwrap(table("""
+            # a comment
+            title = "a \\"quoted\\" \\u00e9 word" # after
+            path = 'C:\\raw\\n'
+            hex = 0xff1e1e2e
+            big = 1_000
+            neg = -5
+            ratio = 0.5
+            exp = 1e3
+            yes = true
+            list = [1, 2,
+              3, # a comment in a list
+            ]
+            inline = { a = 1, b.c = "x" }
+            "quoted.key" = 1
+            dotted.key = 2
+            multi = \"\"\"
+            line 1
+            line 2\"\"\"
+            literal = '''raw \\n'''
+            """))
+        XCTAssertEqual(root.keys, ["title", "path", "hex", "big", "neg", "ratio", "exp", "yes", "list", "inline", "quoted.key", "dotted", "multi", "literal"])
+        XCTAssertEqual(string(root["title"]), "a \"quoted\" é word")
+        XCTAssertEqual(string(root["path"]), "C:\\raw\\n")
+        XCTAssertEqual(int(root["hex"]), 0xFF1E_1E2E)
+        XCTAssertEqual(int(root["big"]), 1000)
+        XCTAssertEqual(int(root["neg"]), -5)
+        if case .float(let ratio)? = root["ratio"] { XCTAssertEqual(ratio, 0.5) } else { XCTFail("ratio") }
+        if case .float(let exp)? = root["exp"] { XCTAssertEqual(exp, 1000) } else { XCTFail("exp") }
+        if case .bool(true)? = root["yes"] {} else { XCTFail("yes") }
+        if case .array(let list)? = root["list"] { XCTAssertEqual(list.count, 3) } else { XCTFail("list") }
+        XCTAssertEqual(int(sub(root["inline"])?["a"]), 1)
+        XCTAssertEqual(string(sub(sub(root["inline"])?["b"])?["c"]), "x")
+        XCTAssertEqual(int(root["quoted.key"]), 1)
+        XCTAssertEqual(int(sub(root["dotted"])?["key"]), 2)
+        XCTAssertEqual(string(root["multi"]), "line 1\nline 2") // the first new line goes
+        XCTAssertEqual(string(root["literal"]), "raw \\n")
+    }
+
+    func testTables() throws {
+        let root = try XCTUnwrap(table("""
+            [bar]
+            height = 32
+            [bar.shadow]
+            drawing = true
+
+            [[item]]
+            name = "a"
+            [[item]]
+            name = "b"
+            [item.background]
+            color = 1
+            """))
+        XCTAssertEqual(int(sub(root["bar"])?["height"]), 32)
+        XCTAssertNotNil(sub(sub(root["bar"])?["shadow"]))
+        guard case .array(let items)? = root["item"] else { return XCTFail("items") }
+        XCTAssertEqual(items.count, 2)
+        guard case .table(let second) = items[1] else { return XCTFail("second") }
+        XCTAssertEqual(string(second["name"]), "b")
+        XCTAssertEqual(int(sub(second["background"])?["color"]), 1) // [item.x] goes to the last [[item]]
+    }
+
+    func testErrors() {
+        for (text, line) in [("a = ", 1), ("a = 1\na = 2", 2), ("a = \"open", 1), ("[t]\nx = 1\n[t]", 3), ("x = 1 2", 1),
+                             ("a = [1 2]", 1), ("a = { b = 1 }\n[a]", 2), ("a = nope", 1), ("= 1", 1)]
+        {
+            switch TOML.parse(text) {
+                case .success: XCTFail("accepted: \(text)")
+                case .failure(let error): XCTAssertEqual(error.line, line, "\(text): \(error)")
+            }
+        }
+    }
+}
+
+final class ConfigFileTests: XCTestCase {
+    let config = """
+        hotload = true
+        exec = "echo ${HOME}"
+
+        [vars]
+        accent = "0xffcba6f7"
+
+        [bar]
+        height = 32
+        color = 0xff1e1e2e
+        glass = true
+
+        [defaults]
+        icon.font = "Hack Nerd Font:Bold:14"
+        label = { color = "${accent}", padding_left = 4 }
+
+        [[event]]
+        name = "theme_changed"
+
+        [[item]]
+        name = "clock"
+        position = "right"
+        update_freq = 10
+        script = "sketchybar --set $NAME label=\\"$(date '+%H:%M')\\""
+        subscribe = "system_woke"
+        background = { color = "${accent}", corner_radius = 6, drawing = false }
+
+        [[item]]
+        type = "graph"
+        name = "cpu"
+        position = "right"
+        graph = { width = 60, color = 0xff00ff00 }
+
+        [[item]]
+        type = "bracket"
+        name = "group"
+        members = ["clock", "/c.u/"]
+        display = [1, 2]
+
+        [[item]]
+        type = "notch"
+        name = "island"
+        notch.width = 340
+        """
+
+    func testPlan() throws {
+        let plan = try ConfigFile.plan(config, environment: ["HOME": "/Users/me"]).get()
+        XCTAssertEqual(plan.steps.map(\.source), ["[bar]", "[defaults]", "event 'theme_changed'", "item 'clock'", "item 'cpu'",
+                                                  "item 'group'", "item 'island'", "hotload"])
+        XCTAssertEqual(plan.steps[0].arguments, ["--bar", "height=32", "color=0xff1e1e2e", "glass=on"])
+        XCTAssertEqual(plan.steps[1].arguments, ["--default", "icon.font=Hack Nerd Font:Bold:14", "label.color=0xffcba6f7", "label.padding_left=4"])
+        XCTAssertEqual(plan.steps[3].arguments, ["--add", "item", "clock", "right", "--set", "clock", "update_freq=10",
+                                                 "script=sketchybar --set $NAME label=\"$(date '+%H:%M')\"",
+                                                 "background.color=0xffcba6f7", "background.corner_radius=6", "background.drawing=off",
+                                                 "--subscribe", "clock", "system_woke"])
+        XCTAssertEqual(Array(plan.steps[4].arguments.prefix(5)), ["--add", "graph", "cpu", "right", "60"]) // the width goes with --add
+        XCTAssertEqual(plan.steps[5].arguments, ["--add", "bracket", "group", "clock", "/c.u/", "--set", "group", "display=1,2"])
+        XCTAssertEqual(plan.steps[6].arguments, ["--add", "notch", "island", "--set", "island", "notch.width=340"])
+        XCTAssertEqual(plan.exec, ["echo /Users/me"])
+
+        // and the bar takes it
+        let model = BarModel()
+        for step in plan.steps { XCTAssertFalse(send(model, step.arguments).failed, step.source) }
+        XCTAssertEqual(model.items.map(\.name), ["clock", "cpu", "group", "island"])
+        XCTAssertEqual(model.item(named: "clock")?.props.label.color.value, 0xFFCB_A6F7) // from the defaults
+        XCTAssertFalse(model.item(named: "clock")!.props.background.drawing) // drawing=off came after the color
+        XCTAssertEqual(model.bar.glass, "regular")
+    }
+
+    func testPlanErrors() {
+        for (text, wanted) in [("[baar]\nheight = 1", "unknown section 'baar'"), ("[[item]]\nposition = \"left\"", "item #1 needs a name"),
+                               ("[[item]]\nname = \"a\"", "item 'a' needs a position"), ("[[item]]\nname = \"a\"\ntype = \"widget\"\nposition = \"left\"", "unknown type"),
+                               ("[[item]]\nname = \"b\"\ntype = \"bracket\"", "needs members"), ("item = 1", "must be [[item]]"), ("x = ", "line 1")]
+        {
+            switch ConfigFile.plan(text) {
+                case .success: XCTFail("accepted: \(text)")
+                case .failure(let error): XCTAssertTrue(error.message.contains(wanted), "\(text): \(error.message)")
+            }
+        }
+    }
+
+    /// A bar made with commands, written as TOML, read back: the same bar.
+    func testExportRoundTrip() throws {
+        let model = BarModel()
+        _ = send(model, ["--bar", "height=30", "color=0x80112233", "corner_radius=8", "position=bottom",
+                         "--default", "label.font=SF Pro:Semibold:13", "icon.padding_left=4",
+                         "--add", "event", "skyland_update", "com.waxdred.update",
+                         "--add", "item", "apple", "left", "--set", "apple", "icon=", "click_script=open -a \"System Settings\"",
+                         "popup.align=center", "background.image=app.com.apple.finder", "background.drawing=off",
+                         "--add", "item", "apple.about", "popup.apple", "--set", "apple.about", "label=À propos \"ok\"\ttab",
+                         "--add", "item", "clock", "right", "--set", "clock", "update_freq=10", "script=date", "label.max_chars=5", "width=80",
+                         "--subscribe", "clock", "system_woke", "skyland_update",
+                         "--add", "slider", "vol", "right", "120", "--set", "vol", "slider.percentage=30", "slider.knob=●",
+                         "--add", "bracket", "group", "/^(clock|vol)$/", "--set", "group", "background.color=0x40ffffff",
+                         "--add", "workspaces", "ws", "left", "--set", "ws", "label={apps}", "focused.icon.color=0xffff0000", "workspaces.animation=sin",
+                         "--add", "notch", "island", "--set", "island", "notch.width=300"])
+        let toml = ConfigExport.toml(model)
+        let plan = try ConfigFile.plan(toml).get()
+        let copy = BarModel()
+        for step in plan.steps { XCTAssertFalse(send(copy, step.arguments).failed, "\(step.source)\n\(toml)") }
+        XCTAssertEqual(copy.bar, model.bar)
+        XCTAssertEqual(copy.defaults, model.defaults)
+        XCTAssertEqual(copy.events, model.events)
+        XCTAssertEqual(copy.items.map(\.name), model.items.map(\.name))
+        for (mine, theirs) in zip(copy.items, model.items) {
+            XCTAssertEqual(mine.kind, theirs.kind, mine.name)
+            XCTAssertEqual(mine.props, theirs.props, "\(mine.name)\n\(toml)")
+            XCTAssertEqual(mine.subscriptions, theirs.subscriptions, mine.name)
+            XCTAssertEqual(mine.options, theirs.options, mine.name)
+            XCTAssertEqual(mine.states, theirs.states, mine.name)
+        }
+    }
+}

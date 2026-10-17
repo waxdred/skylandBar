@@ -247,14 +247,15 @@ final class BarApp {
     private var configFile: String? {
         if let configPath { return configPath }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return ["\(home)/.config/skylandbar/skylandbarrc", "\(home)/.config/sketchybar/sketchybarrc"]
+        return ["\(home)/.config/skylandbar/skylandbar.toml", "\(home)/.config/skylandbar/skylandbarrc",
+                "\(home)/.config/sketchybar/sketchybarrc"]
             .first { FileManager.default.fileExists(atPath: $0) }
     }
 
     /// Runs the config, then every script once (`forced`) unless it sent `--update`.
     private func runConfig() {
         guard let file = configFile else {
-            FileHandle.standardError.write(Data("skylandbar: no config (~/.config/skylandbar/skylandbarrc or ~/.config/sketchybar/sketchybarrc)\n".utf8))
+            FileHandle.standardError.write(Data("skylandbar: no config (~/.config/skylandbar/skylandbar.toml, skylandbarrc or ~/.config/sketchybar/sketchybarrc)\n".utf8))
             setNeedsLayout()
             return
         }
@@ -267,6 +268,7 @@ final class BarApp {
     /// config that keeps running (SbarLua's event loop) gets that after 2 seconds.
     private func run(_ file: String) {
         scripts.configDir = (file as NSString).deletingLastPathComponent
+        if file.hasSuffix(".toml") { return load(file) }
         var forced = false
         let updates = model.updates
         let force = { [weak self] in
@@ -278,6 +280,27 @@ final class BarApp {
         }
         scripts.launch(file: file, onExit: force)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: force)
+    }
+
+    /// skylandbar.toml: its commands run here, at once, each part's errors reported with
+    /// its place; then its `exec` commands, then every script once (`forced`).
+    private func load(_ file: String) {
+        let say = { (text: String) in FileHandle.standardError.write(Data("skylandbar: \(file): \(text)\n".utf8)) }
+        guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return say("cannot read it") }
+        switch ConfigFile.plan(text, environment: scripts.environment) {
+            case .failure(let error):
+                say(error.message)
+            case .success(let plan):
+                for step in plan.steps {
+                    let answer = handle(step.arguments)
+                    let problems = answer.text.split(separator: "\n").filter { $0.hasPrefix("[") }
+                    for problem in problems { say("\(step.source): \(problem)") }
+                }
+                for command in plan.exec { scripts.launch(["/bin/bash", "-c", command], env: [:]) }
+                scripts.run(model.scripts(for: "forced"))
+                scripts.run(model.spaceChange().filter { run in model.item(named: run.item)?.kind == "space" })
+        }
+        setNeedsLayout()
     }
 
     private func reload(_ path: String?) {

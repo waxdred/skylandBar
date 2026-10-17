@@ -606,6 +606,10 @@ public final class BarModel {
     // MARK: queries
 
     private func query(_ what: String, _ o: inout Outcome) {
+        if what == "config" { // skylandbar.toml, not JSON
+            o.output += ConfigExport.toml(self)
+            return
+        }
         let json: Any
         switch what {
             case "bar":
@@ -627,7 +631,7 @@ public final class BarModel {
                 json = menuItems
             default:
                 guard let item = item(named: what) else {
-                    return o.errors.append("[!] Query: '\(what)' is not bar, defaults, events, displays, default_menu_items or an item")
+                    return o.errors.append("[!] Query: '\(what)' is not bar, defaults, events, displays, default_menu_items, config or an item")
                 }
                 json = itemJSON(item)
         }
