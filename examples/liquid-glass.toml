@@ -25,7 +25,7 @@ workspaces = { animation = "tanh", animation_frames = "${spring}" }
 type = "bracket"
 name = "workspaces.glass"
 members = ["/^ws\\./"]
-background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true }
+background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true, padding_left = 4, padding_right = 4 }
 
 # --- center: the focused window, its own glass capsule --------------------------------------
 
@@ -101,5 +101,5 @@ background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 type = "bracket"
 name = "status.glass"
 members = ["volume", "battery", "clock"]
-background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true }
+background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true, padding_left = 4, padding_right = 4 }
 

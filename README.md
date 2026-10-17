@@ -140,6 +140,9 @@ What makes this possible, for any config:
   changes, and scripts get `appearance_change` (INFO dark or light) and `APPEARANCE`.
 - `hover.<property>` on any item, a workspaces component too: its look while the mouse is on it.
 - `corner_radius = "concentric"`, `glass_spacing`, and capsules for glass.
+- A bracket spans its members with the first one's `background.padding_left` and the last
+  one's `background.padding_right` (as in sketchybar), then its own `background.padding_left/right`
+  outward: room at a group's ends only, so a selection keeps off the glass's edge.
 - `vars_file = "~/.cache/skyland/theme.env"` (before any section): its `NAME=value` lines are vars
   over every `[vars]`; the config loads again when the file changes. The Liquid Glass theme
   takes skyland's `ACCENT` this way (skyland-theme writes it), for a light tint on the glass,

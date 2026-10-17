@@ -663,12 +663,17 @@ final class BarApp {
         updateScrolling()
     }
 
-    /// Each bracket around its members on this bar, behind them.
+    /// Each bracket around its members on this bar, behind them, with their outer background
+    /// paddings (sketchybar's: the first one's padding_left, the last one's padding_right),
+    /// then its own background paddings outward (skylandbar's: room at a group's ends only)
     private func brackets(around items: [PlacedItem], height: Double) -> [PlacedItem] {
         model.items.filter { $0.kind == "bracket" && $0.props.drawing }.compactMap { bracket in
             let members = Set(model.members(of: bracket))
             let inside = items.filter { members.contains($0.name) }
-            guard let start = inside.map(\.x).min(), let end = inside.map({ $0.x + $0.length }).max() else { return nil }
+            guard let first = inside.min(by: { $0.x < $1.x }), let last = inside.max(by: { $0.x + $0.length < $1.x + $1.length }) else { return nil }
+            let own = model.displayed(bracket).background
+            let start = first.x - first.props.background.paddingLeft - own.paddingLeft
+            let end = last.x + last.length + last.props.background.paddingRight + own.paddingRight
             return placed(bracket, model.displayed(bracket), x: start, length: end - start, top: 0, height: height, middle: 0)
         }
     }
