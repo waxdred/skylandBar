@@ -25,6 +25,11 @@ struct GlassSettings: Equatable {
     var refraction = 14.0
     var blur = 2.0
     var saturation = 1.5
+    var lensResponse = 0.35
+    var lensBounce = 0.3
+    var lensStretch = 1.0
+    /// the Reduce Motion setting: lenses do not slide
+    var reduceMotion = false
 
     init() {}
 
@@ -34,6 +39,9 @@ struct GlassSettings: Equatable {
         refraction = bar.glassRefraction
         blur = bar.glassBlur
         saturation = bar.glassSaturation
+        lensResponse = bar.glassLensResponse
+        lensBounce = bar.glassLensBounce
+        lensStretch = bar.glassLensStretch
     }
 }
 

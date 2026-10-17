@@ -72,6 +72,10 @@ glass_engine = "auto"
 glass_refraction = 6       # how far the edges bend what is behind, points (at most a shape's half height / 2.2)
 glass_blur = 2
 glass_saturation = 1.6
+# the selection (a lens) slides to the new item on a spring, stretching like a drop
+glass_lens_response = 0.35 # seconds; 0: it jumps
+glass_lens_bounce = 0.3    # overshoot, 0 to 1
+glass_lens_stretch = 1     # 0: no stretch
 font_smoothing = false
 
 [defaults]

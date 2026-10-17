@@ -31,5 +31,6 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `15-toml.sh` | `skylandbar.toml` : `--export`, `--check`, chargement, hotload |
 | `16-liquid-glass.sh` | le thème Liquid Glass : capsules, survol, popup, clair / sombre, accessibilité |
 | `17-glass-engines.sh` | moteurs de verre : `metal` (réfraction), `backdrop`, `system`, réglages, fusion |
+| `18-lens-motion.sh` | la sélection qui glisse : ressort, dépassement, étirement, apparition, Réduire les animations |
 
 Note ce qui ne va pas (le numéro du script et la case) et envoie-le avec une capture.

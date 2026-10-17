@@ -120,6 +120,11 @@ To get `metal`, allow skylandbar in System Settings > Privacy & Security > Scree
 restart it (`--bar glass_engine=metal` asks once). The capture only covers the bar and a margin
 around it, and sends a frame only when what is behind changes.
 
+A selection lens (`background.glass = "lens"`, the focused workspace in the theme) slides to
+its new item on a spring, as Apple's tab bars do: `glass_lens_response` (seconds, 0.35; 0 jumps),
+`glass_lens_bounce` (overshoot, 0 to 1, 0.3), `glass_lens_stretch` (how much it stretches along
+its way, like a drop; 0: none). A lens that appears grows out of 70 %. Reduce Motion: no slide.
+
 What makes this possible, for any config:
 
 - `include = "themes/x.toml"` (before any section, relative to the config's folder): a theme's

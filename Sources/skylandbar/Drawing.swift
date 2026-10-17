@@ -567,6 +567,12 @@ final class BarWindow {
     private var glass: GlassRenderer?
     private var glassEngine: String?
     private var glassFailed = false
+    /// the selection lenses sliding to their items, the frames that draw them meanwhile,
+    /// and the shapes and settings they go toward
+    private let lenses = LensMotion()
+    private var lensTicker: FrameTicker?
+    private var glassTargets: [GlassShape] = []
+    private var glassSettings = GlassSettings()
 
     init(display: Int) {
         self.display = display
@@ -666,7 +672,32 @@ final class BarWindow {
                 root.addSubview(view, positioned: .below, relativeTo: self.view)
             }
         }
-        glass?.update(shapes, settings: settings, window: panel)
+        glassTargets = shapes
+        glassSettings = settings
+        drawGlass()
+    }
+
+    /// The glass now: each lens where its spring has it on the way to its item (stretched by
+    /// its speed); frames follow while one moves.
+    private func drawGlass() {
+        lenses.response = glassSettings.lensResponse
+        lenses.bounce = glassSettings.lensBounce
+        lenses.stretch = glassSettings.lensStretch
+        var shapes = glassTargets
+        let indices = shapes.indices.filter { shapes[$0].style == "lens" }
+        let targets = indices.map { Box(x: Double(shapes[$0].rect.minX), y: Double(shapes[$0].rect.minY),
+                                        width: Double(shapes[$0].rect.width), height: Double(shapes[$0].rect.height)) }
+        let (rects, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)
+        for (index, rect) in zip(indices, rects) {
+            shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+        }
+        glass?.update(shapes, settings: glassSettings, window: panel)
+        if moving && lensTicker == nil {
+            lensTicker = FrameTicker(view: panel.isVisible ? view : nil) { [weak self] in self?.drawGlass() }
+        } else if !moving, let ticker = lensTicker {
+            ticker.stop()
+            lensTicker = nil
+        }
     }
 }
 

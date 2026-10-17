@@ -604,7 +604,7 @@ final class BarApp {
                 anchors[shown[index].name] = (NSRect(x: frame.minX + x, y: frame.minY, width: lengths[index], height: frame.height), window.display)
             }
             window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar))
-            window.updateGlass(GlassSettings(bar: bar)) // every layout: the metal glass follows the window
+            window.updateGlass(glassSettings(bar)) // every layout: the metal glass follows the window
         }
         layoutPopups(bar: bar, anchors: &anchors, frames: &frames)
         layoutNotch(frames: &frames)
@@ -675,8 +675,14 @@ final class BarApp {
             anchors[children[index].name] = (NSRect(x: x + place.x, y: y + laid.height - place.y - row, width: lengths[index], height: row), anchor.display)
         }
         window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing))
-        window.updateGlass(GlassSettings(bar: bar))
+        window.updateGlass(glassSettings(bar))
         window.panel.orderFrontRegardless()
+    }
+
+    private func glassSettings(_ bar: BarProps) -> GlassSettings {
+        var settings = GlassSettings(bar: bar)
+        settings.reduceMotion = model.reduceMotion
+        return settings
     }
 
     // MARK: notch

@@ -867,3 +867,57 @@ final class LiquidGlassTests: XCTestCase {
         }
     }
 }
+
+final class LensMotionTests: XCTestCase {
+    private func run(_ motion: LensMotion, to target: Box, from start: Double, frames: Int, fps: Double = 60) -> (last: Box, maxX: Double, maxWidth: Double, settled: Int?) {
+        var maxX = -Double.infinity, maxWidth = 0.0, settled: Int?
+        var last = target
+        for frame in 1 ... frames {
+            let (rects, moving) = motion.step([target], now: start + Double(frame) / fps)
+            last = rects[0]
+            maxX = max(maxX, last.x)
+            maxWidth = max(maxWidth, last.width)
+            if !moving && settled == nil { settled = frame }
+        }
+        return (last, maxX, maxWidth, settled)
+    }
+
+    func testSlide() {
+        let motion = LensMotion()
+        let a = Box(x: 0, y: 4, width: 60, height: 28), b = Box(x: 120, y: 4, width: 60, height: 28)
+        _ = motion.step([a], now: 0)
+        _ = run(motion, to: a, from: 0, frames: 60) // the first one grows in; let it rest
+        let slide = run(motion, to: b, from: 1, frames: 90)
+        XCTAssertEqual(slide.last, b) // there, at rest
+        XCTAssertNotNil(slide.settled)
+        XCTAssertLessThan(slide.settled!, 40) // about half a second
+        XCTAssertGreaterThan(slide.maxX, b.x + 1) // a little past it (bounce 0.3), then back
+        XCTAssertGreaterThan(slide.maxWidth, 70) // stretched on its way
+        XCTAssertLessThanOrEqual(slide.maxWidth, 60 * 1.35 + 0.5)
+    }
+
+    func testNoBounceNoStretch() {
+        let motion = LensMotion()
+        motion.bounce = 0
+        motion.stretch = 0
+        let a = Box(x: 0, y: 0, width: 50, height: 20), b = Box(x: 100, y: 0, width: 50, height: 20)
+        _ = run(motion, to: a, from: 0, frames: 60)
+        let slide = run(motion, to: b, from: 1, frames: 120, fps: 120)
+        XCTAssertLessThanOrEqual(slide.maxX, b.x + 0.2)
+        XCTAssertEqual(slide.maxWidth, 50, accuracy: 0.5)
+        XCTAssertEqual(slide.last, b)
+    }
+
+    func testAppearsAndReduceMotion() {
+        let motion = LensMotion()
+        let target = Box(x: 10, y: 0, width: 100, height: 40)
+        let first = motion.step([target], now: 0)
+        XCTAssertEqual(first.rects[0].width, 70, accuracy: 0.01) // grows out of 70 %
+        XCTAssertTrue(first.moving)
+        let still = motion.step([Box(x: 300, y: 0, width: 100, height: 40)], now: 0.1, reduceMotion: true)
+        XCTAssertEqual(still.rects[0].x, 300) // at once
+        XCTAssertFalse(still.moving)
+        motion.response = 0
+        XCTAssertFalse(motion.step([target], now: 0.2).moving) // response 0: it jumps
+    }
+}

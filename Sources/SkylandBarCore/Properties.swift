@@ -557,6 +557,11 @@ public struct BarProps: Equatable {
     public var glassRefraction = 14.0
     public var glassBlur = 2.0
     public var glassSaturation = 1.5
+    /// a selection lens moving to another item: its spring (seconds, 0: it jumps), its
+    /// overshoot (0...1), how much it stretches on its way (0: none)
+    public var glassLensResponse = 0.35
+    public var glassLensBounce = 0.3
+    public var glassLensStretch = 1.0
 
     public init() {}
 
@@ -571,6 +576,13 @@ public struct BarProps: Equatable {
             case "glass_refraction": return Value.setNumber(&glassRefraction, value, minimum: 0)
             case "glass_blur": return Value.setNumber(&glassBlur, value, minimum: 0)
             case "glass_saturation": return Value.setNumber(&glassSaturation, value, minimum: 0)
+            case "glass_lens_response": return Value.setNumber(&glassLensResponse, value, minimum: 0)
+            case "glass_lens_bounce":
+                var bounce = glassLensBounce
+                if let error = Value.setNumber(&bounce, value, minimum: 0) { return error }
+                glassLensBounce = min(1, bounce)
+                return nil
+            case "glass_lens_stretch": return Value.setNumber(&glassLensStretch, value, minimum: 0)
             case "position": return Value.oneOf(&position, value, ["top", "bottom"])
             case "height": return Value.setNumber(&height, value, minimum: 0)
             case "notch_display_height": return Value.setNumber(&notchDisplayHeight, value, minimum: 0)
@@ -632,6 +644,7 @@ public struct BarProps: Equatable {
             "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
             "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass, "glass_spacing": glassSpacing,
             "glass_engine": glassEngine, "glass_refraction": glassRefraction, "glass_blur": glassBlur, "glass_saturation": glassSaturation,
+            "glass_lens_response": glassLensResponse, "glass_lens_bounce": glassLensBounce, "glass_lens_stretch": glassLensStretch,
         ]
     }
 }
