@@ -388,3 +388,29 @@ final class SkylandTests: XCTestCase {
         XCTAssertEqual(runs.first?.env["FOCUSED_WORKSPACE"], "2")
     }
 }
+
+final class MachTests: XCTestCase {
+    func testWire() {
+        let bytes = Wire.message(["--set", "clock", "label=12:00"])
+        XCTAssertEqual(bytes, Array("--set\0clock\0label=12:00\0\0".utf8))
+        XCTAssertEqual(Wire.arguments(bytes), ["--set", "clock", "label=12:00"])
+        XCTAssertEqual(Wire.arguments(Array("--update\0".utf8)), ["--update"]) // one NUL only
+        XCTAssertEqual(Wire.arguments([]), [])
+        XCTAssertEqual(Wire.event(["SENDER": "routine", "NAME": "cpu"]), Array("NAME\0cpu\0SENDER\0routine\0\0".utf8))
+    }
+
+    func testHelpers() {
+        let model = BarModel()
+        // what SbarLua does: no script, its event loop's name as mach_helper
+        _ = send(model, ["--add", "item", "lua", "left", "--set", "lua", "mach_helper=git.felix.sbar.123", "update_freq=5",
+                         "--subscribe", "lua", "front_app_switched"])
+        XCTAssertTrue(model.item(named: "lua")!.props.hasScript)
+        let runs = model.scripts(for: "front_app_switched", info: "Safari")
+        XCTAssertEqual(runs.map(\.helper), ["git.felix.sbar.123"])
+        XCTAssertEqual(runs.first?.script, "")
+        XCTAssertEqual(runs.first?.env["INFO"], "Safari")
+        XCTAssertEqual(model.scripts(for: "routine", only: "lua").count, 1)
+        _ = send(model, ["--set", "lua", "event_port=git.felix.other"])
+        XCTAssertEqual(model.item(named: "lua")?.props.machHelper, "git.felix.other")
+    }
+}

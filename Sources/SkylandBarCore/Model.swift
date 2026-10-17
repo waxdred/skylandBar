@@ -13,11 +13,14 @@ public struct BarItem: Equatable {
     public var graphValues: [Double] = []
 }
 
-/// A script to run: the item's `script` (or `click_script`) with NAME, SENDER, INFO...
+/// A script to run: the item's `script` (or `click_script`) with NAME, SENDER, INFO...;
+/// and/or the same variables sent to its `mach_helper` (SbarLua, helper programs).
 public struct ScriptRun: Equatable {
     public let item: String
     public let script: String
     public let env: [String: String]
+    /// the bootstrap name of the item's mach_helper, "" none
+    public var helper = ""
 }
 
 /// What a message did, for the app to carry out.
@@ -357,7 +360,7 @@ public final class BarModel {
     public func spaceChange() -> [ScriptRun] {
         let info = "{" + currentSpaces.sorted { $0.key < $1.key }.map { "\"display-\($0.key)\":\($0.value)" }.joined(separator: ",") + "}"
         return items.compactMap { item in
-            guard !item.props.script.isEmpty, item.props.updates != "off",
+            guard item.props.hasScript, item.props.updates != "off",
                   item.kind == "space" || item.subscriptions.contains("space_change") else { return nil }
             var env = ["NAME": item.name, "SENDER": "space_change", "INFO": info]
             if item.kind == "space" {
@@ -367,13 +370,13 @@ public final class BarModel {
                 if let sid = spaces.first { env["SID"] = String(sid) }
                 if let shown { env["DID"] = String(shown.key) } else if let did = Int(item.props.display) { env["DID"] = String(did) }
             }
-            return ScriptRun(item: item.name, script: item.props.script, env: env)
+            return ScriptRun(item: item.name, script: item.props.script, env: env, helper: item.props.machHelper)
         }
     }
 
     /// Whether an item listens to `event`, so the app looks things up only when needed.
     public func isSubscribed(to event: String) -> Bool {
-        items.contains { $0.subscriptions.contains(event) && !$0.props.script.isEmpty }
+        items.contains { $0.subscriptions.contains(event) && $0.props.hasScript }
     }
 
     /// The scripts an event runs: `forced` runs every item's script, `routine` the item's
@@ -381,13 +384,13 @@ public final class BarModel {
     public func scripts(for event: String, info: String = "", env: [String: String] = [:], only: String? = nil) -> [ScriptRun] {
         items.compactMap { item in
             if let only, item.name != only { return nil }
-            guard !item.props.script.isEmpty, item.props.updates != "off" else { return nil }
+            guard item.props.hasScript, item.props.updates != "off" else { return nil }
             if event != "forced" && event != "routine" && !item.subscriptions.contains(event) { return nil }
             var vars = env
             vars["NAME"] = item.name
             vars["SENDER"] = event
             vars["INFO"] = info
-            return ScriptRun(item: item.name, script: item.props.script, env: vars)
+            return ScriptRun(item: item.name, script: item.props.script, env: vars, helper: item.props.machHelper)
         }
     }
 
@@ -448,7 +451,7 @@ public final class BarModel {
             "label": item.props.label.json,
             "popup": item.props.popup.json.merging(["items": popupItems(of: item.name).map(\.name)]) { a, _ in a },
             "scripting": [
-                "script": item.props.script, "click_script": item.props.clickScript,
+                "script": item.props.script, "click_script": item.props.clickScript, "mach_helper": item.props.machHelper,
                 "update_freq": item.props.updateFreq, "updates": item.props.updates,
                 "subscriptions": item.subscriptions,
             ] as [String: Any],

@@ -11,6 +11,7 @@ final class BarApp {
     private let aliases = AliasCapture()
     private let skyland = SkylandEvents()
     private var server: Server!
+    private var mach: MachServer!
     private var windows: [BarWindow] = []
     /// open popups, by the item they belong to
     private var popups: [String: BarWindow] = [:]
@@ -42,6 +43,10 @@ final class BarApp {
             FileHandle.standardError.write(Data("skylandbar: cannot listen on \(Socket.path)\n".utf8))
             exit(1)
         }
+        mach = MachServer { [unowned self] arguments in self.handle(arguments) }
+        mach.start()
+        // SbarLua finds the bar by BAR_NAME: the sketchybar name when we hold it
+        scripts.barName = mach.names.first { $0 == "sketchybar" } ?? "skylandbar"
         events.onEvent = { [unowned self] event, info in
             if event == "space_change" { return self.spaceChanged() }
             if event == "front_app_switched" { self.focusChanged() }
@@ -197,17 +202,24 @@ final class BarApp {
         if hotloadOn { watch(file) }
     }
 
+    /// Runs a config, then every script once when it ends; a config that keeps running
+    /// (SbarLua's event loop) gets that after 2 seconds.
     private func run(_ file: String) {
         scripts.configDir = (file as NSString).deletingLastPathComponent
-        scripts.launch(file: file) { [weak self] in
-            guard let self else { return }
+        var forced = false
+        let force = { [weak self] in
+            guard let self, !forced else { return }
+            forced = true
             self.scripts.run(self.model.scripts(for: "forced"))
             self.scripts.run(self.model.spaceChange().filter { run in self.model.item(named: run.item)?.kind == "space" })
             self.setNeedsLayout()
         }
+        scripts.launch(file: file, onExit: force)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: force)
     }
 
     private func reload(_ path: String?) {
+        scripts.terminateAll() // the config too, when it still runs (SbarLua)
         for timer in timers.values { timer.invalidate() }
         timers = [:]
         model.reset()
@@ -246,7 +258,7 @@ final class BarApp {
     private func updateTimers() {
         for timer in timers.values { timer.invalidate() }
         timers = [:]
-        for item in model.items where item.props.updateFreq > 0 && !item.props.script.isEmpty && item.props.updates != "off" {
+        for item in model.items where item.props.updateFreq > 0 && item.props.hasScript && item.props.updates != "off" {
             let name = item.name
             let timer = Timer(timeInterval: item.props.updateFreq, repeats: true) { [unowned self] _ in
                 // when_shown: not while the item or the bar is hidden

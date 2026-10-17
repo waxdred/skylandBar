@@ -265,7 +265,10 @@ public struct ItemProps: Equatable {
     public var graph = GraphProps()
     public var slider = SliderProps()
     public var alias = AliasProps()
-    /// mach_helper, shadow...: taken so configs load, not used
+    /// a program's bootstrap name (SbarLua's, a helper's): it gets the item's events as a
+    /// Mach message instead of (or as well as) a script
+    public var machHelper = ""
+    /// shadow...: taken so configs load, not used
     public var extra: [String: String] = [:]
 
     public init() {}
@@ -328,12 +331,18 @@ public struct ItemProps: Equatable {
             case "graph": return rest.map { graph.apply($0, value) } ?? unknownProperty
             case "slider": return rest.map { slider.apply($0, value) } ?? unknownProperty
             case "alias": return rest.map { alias.apply($0, value) } ?? unknownProperty
-            case "mach_helper", "shadow":
+            case "mach_helper", "event_port":
+                machHelper = value
+                return nil
+            case "shadow":
                 extra[key] = value
                 return nil
             default: return unknownProperty
         }
     }
+
+    /// Whether events do anything for it: a script or a mach_helper.
+    public var hasScript: Bool { !script.isEmpty || !machHelper.isEmpty }
 
     static func isNumberList(_ value: String) -> Bool {
         !value.isEmpty && value.split(separator: ",").allSatisfy { Int($0) != nil }

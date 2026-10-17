@@ -7,9 +7,10 @@ import SkylandBarCore
 //   skylandbar --config <rc>   start the bar with that config
 //   skylandbar --bar ... --add item ... --set ...   talk to the running bar, like sketchybar
 
-let version = "0.3.0"
+let version = "0.4.0"
 let usage = """
     usage: skylandbar [--config <file>]       start the bar
+           skylandbar --service install|uninstall    start it at login (launchd)
            skylandbar <commands>              send commands to the running bar:
              --bar <property=value>...        --add item|event|bracket|graph|slider|alias|space ...
              --set <name|/regex/> <property=value>...    --default <property=value>...
@@ -20,7 +21,8 @@ let usage = """
              --query bar|defaults|events|displays|default_menu_items|<name>
              --update   --reload [<file>]   --hotload on|off   --exit
     Configs and plugins written for sketchybar work as they are: scripts find this bar as
-    `sketchybar` on their PATH.
+    `sketchybar` on their PATH, and the sketchybar CLI and SbarLua reach it on sketchybar's
+    Mach name while sketchybar itself does not run.
     """
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -28,6 +30,9 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments.first == "--version" || arguments.first == "-v" {
     print("skylandbar \(version)")
     exit(0)
+}
+if arguments.first == "--service" {
+    exit(Service.run(arguments.count == 2 ? arguments[1] : ""))
 }
 if arguments.first == "--help" || arguments.first == "-h" {
     print(usage)

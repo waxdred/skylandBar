@@ -76,17 +76,32 @@ skylandbar --query bar
   SketchyBar; otherwise `INFO` is empty.
 - **media_change**: MediaRemote no longer answers apps from macOS 15.4. Music and Spotify still
   report through their notifications, but there is no artwork for them.
-- **space_change**: Mission Control spaces. Workspaces from skyland or AeroSpace come through your
-  own events (`--add event` + `--trigger`), as with SketchyBar.
+- **space_change**: Mission Control spaces. Workspaces from skyland or AeroSpace come through the
+  skyland events above.
+- **sketchybar's Mach name**: only one bar can hold `git.felix.sketchybar`. With sketchybar
+  running, the sketchybar CLI and SbarLua talk to sketchybar (skylandbar says so when it starts).
 
 ## Manual tests
 
 `manual-tests/` holds one script per area, with what to check: see its README.
 
-## Not supported
+## SbarLua and the sketchybar CLI
 
-- SbarLua and other configs that talk to SketchyBar through its Mach port (the `mach_helper`
-  property is stored and ignored). Shell configs work.
+skylandbar answers on sketchybar's Mach names (`git.felix.sketchybar` and
+`git.felix.skylandbar`), the way sketchybar's own CLI and [SbarLua](https://github.com/FelixKratz/SbarLua)
+reach the bar. Lua configs run as they are: their events go to the item's `mach_helper` (SbarLua's
+event loop). Calls to `/opt/homebrew/bin/sketchybar` from skyland, AeroSpace or a shell reach
+skylandbar while sketchybar itself is stopped (`brew services stop sketchybar`).
+
+A config that keeps running (SbarLua's event loop) gets its `forced` update 2 seconds after it
+starts. `--reload` stops it before running it again.
+
+## Start at login
+
+```sh
+.build/release/skylandbar --service install     # a launch agent, logs in ~/Library/Logs/skylandbar.log
+.build/release/skylandbar --service uninstall
+```
 
 ## Layout
 

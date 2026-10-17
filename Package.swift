@@ -13,10 +13,12 @@ let package = Package(
     targets: [
         // commands, properties, model, layout: no AppKit, unit tested
         .target(name: "SkylandBarCore"),
+        // sketchybar's Mach messages (its CLI, SbarLua), in C like sketchybar's own
+        .target(name: "SkylandMach"),
         // the bar: socket server and client, windows, drawing, events, scripts
         .executableTarget(
             name: "skylandbar",
-            dependencies: ["SkylandBarCore"],
+            dependencies: ["SkylandBarCore", "SkylandMach"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("IOKit"),

@@ -6,6 +6,8 @@ import SkylandBarCore
 /// plugins written for sketchybar talk to skylandbar unchanged.
 final class ScriptRunner {
     var configDir: String
+    /// what scripts (SbarLua above all) look the bar up by: git.felix.<barName>
+    var barName = "skylandbar"
     let shimDir: String
     /// the scripts still running, stopped when the bar quits
     private var running = Set<Process>()
@@ -33,12 +35,16 @@ final class ScriptRunner {
         let path = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         env["PATH"] = "\(shimDir):\(path):/opt/homebrew/bin:/usr/local/bin"
         env["CONFIG_DIR"] = configDir
-        env["BAR_NAME"] = "skylandbar"
+        env["BAR_NAME"] = barName
+        env["SKYLANDBAR_SCRIPT"] = "1"
         return env
     }
 
     func run(_ runs: [ScriptRun]) {
-        for run in runs { launch(["/bin/bash", "-c", run.script], env: run.env) }
+        for run in runs {
+            if !run.script.isEmpty { launch(["/bin/bash", "-c", run.script], env: run.env) }
+            if !run.helper.isEmpty { MachHelpers.send(run.env, to: run.helper) }
+        }
     }
 
     /// A file runs by itself when it is executable (its shebang), else with bash.

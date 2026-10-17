@@ -75,7 +75,7 @@ enum Client {
     static func send(_ arguments: [String]) -> Int32 {
         guard let fd = Socket.connectToBar() else {
             // a script the bar started, still running after it quit: nothing to say
-            if ProcessInfo.processInfo.environment["BAR_NAME"] == "skylandbar" { return 1 }
+            if ProcessInfo.processInfo.environment["SKYLANDBAR_SCRIPT"] == "1" { return 1 }
             FileHandle.standardError.write(Data("skylandbar: the bar is not running (start it with `skylandbar`)\n".utf8))
             return 1
         }
