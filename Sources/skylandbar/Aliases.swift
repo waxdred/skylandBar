@@ -33,10 +33,10 @@ enum MenuItems {
     }
 
     /// "Owner,Name", or "Owner" for its first item.
-    static func find(_ alias: String) -> Entry? {
+    static func find(_ alias: String, in entries: [Entry]? = nil) -> Entry? {
         let parts = alias.split(separator: ",", maxSplits: 1).map(String.init)
         guard let owner = parts.first else { return nil }
-        return list().first { $0.owner == owner && (parts.count == 1 || $0.name == parts[1]) }
+        return (entries ?? list()).first { $0.owner == owner && (parts.count == 1 || $0.name == parts[1]) }
     }
 
     /// A click on the real item (its menu opens), the pointer put back after.
@@ -63,26 +63,43 @@ final class AliasCapture {
         images = images.filter { aliases.contains($0.key) }
     }
 
+    /// ScreenCaptureKit's windows by id: its list is costly, asked again only for a window
+    /// it does not know yet (an app started, a menu bar item came back)
+    private var known: [CGWindowID: SCWindow] = [:]
+
     func refresh(_ aliases: [String]) {
-        let wanted = aliases.compactMap { alias in MenuItems.find(alias).map { (alias, $0) } }
+        let entries = MenuItems.list() // once for all the aliases
+        let wanted = aliases.compactMap { alias in MenuItems.find(alias, in: entries).map { (alias, $0) } }
         guard !wanted.isEmpty else { return }
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        if wanted.allSatisfy({ known[$0.1.windowID] != nil }) {
+            capture(wanted)
+            return
+        }
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { [weak self] content, _ in
             guard let content else { return }
-            for (alias, entry) in wanted {
-                guard let window = content.windows.first(where: { $0.windowID == entry.windowID }) else { continue }
-                let configuration = SCStreamConfiguration()
-                configuration.width = Int(entry.frame.width * scale)
-                configuration.height = Int(entry.frame.height * scale)
-                configuration.showsCursor = false
-                SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window),
-                                                 configuration: configuration)
-                { image, _ in
-                    guard let image else { return }
-                    DispatchQueue.main.async {
-                        self?.images[alias] = NSImage(cgImage: image, size: entry.frame.size)
-                        self?.onChange?()
-                    }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.known = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { a, _ in a })
+                self.capture(wanted)
+            }
+        }
+    }
+
+    private func capture(_ wanted: [(String, MenuItems.Entry)]) {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        for (alias, entry) in wanted {
+            guard let window = known[entry.windowID] else { continue }
+            let configuration = SCStreamConfiguration()
+            configuration.width = Int(entry.frame.width * scale)
+            configuration.height = Int(entry.frame.height * scale)
+            configuration.showsCursor = false
+            SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                                             configuration: configuration)
+            { [weak self] image, _ in
+                guard let image else { return }
+                DispatchQueue.main.async {
+                    self?.images[alias] = NSImage(cgImage: image, size: entry.frame.size)
+                    self?.onChange?()
                 }
             }
         }

@@ -49,32 +49,67 @@ enum Fonts {
 
     /// sketchybar's: the glyphs' drawn width plus about a pixel, not the advance (Nerd Font
     /// icons draw wider than they advance); 1 for no string, as there
-    static func width(_ string: String, _ font: NSFont) -> Double {
+    static func width(_ string: String, _ font: NSFont) -> Double { metrics(string, font).width }
+
+    /// How far the baseline goes below the middle: half the line's ascent minus its descent,
+    /// rounded up (sketchybar's, on its y-up bar)
+    static func baselineOffset(_ string: String, _ font: NSFont) -> Double { metrics(string, font).baseline }
+
+    private struct MetricsKey: Hashable {
+        let string: String
+        let font: String
+        let size: CGFloat
+    }
+
+    /// A text is measured at every layout and every draw, with the same strings again and
+    /// again: CoreText once per string and font. Kept small: a clock makes a new one a minute.
+    private static var measured: [MetricsKey: (width: Double, baseline: Double)] = [:]
+
+    private static func metrics(_ string: String, _ font: NSFont) -> (width: Double, baseline: Double) {
+        let key = MetricsKey(string: string, font: font.fontName, size: font.pointSize)
+        if let known = measured[key] { return known }
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font]))
-        return floor(CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).width + 1.5)
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        CTLineGetTypographicBounds(line, &ascent, &descent, nil)
+        let result = (floor(CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).width + 1.5), Double(ceil((ascent - descent) / 2)))
+        if measured.count > 2048 { measured.removeAll() }
+        measured[key] = result
+        return result
     }
 }
 
 /// One item as laid out on one bar or popup.
-struct PlacedItem {
-    var name: String
-    var kind: String
+struct PlacedItem: Equatable {
+    let name: String
+    let kind: String
     /// where its content starts (after `background.padding_left`)
-    var x: Double
-    var length: Double
+    let x: Double
+    let length: Double
     /// its row: the whole bar, or a popup row
-    var top: Double
-    var height: Double
-    var props: ItemProps
+    let top: Double
+    let height: Double
+    let props: ItemProps
     /// a graph's, a slider's or an alias's width, between the icon and the label
-    var middle = 0.0
-    var graphValues: [Double] = []
-    var alias: NSImage? = nil
+    let middle: Double
+    let graphValues: [Double]
+    let alias: NSImage?
+    /// x of each part: icon, middle, label (with their paddings), and the texts' content
+    /// widths; measured once, used by every draw, hit test and glass view
+    let parts: (icon: Double, iconWidth: Double, middle: Double, label: Double, labelWidth: Double)
 
-    var rect: NSRect { NSRect(x: x, y: top, width: length, height: height) }
-
-    /// x of each part: icon, middle, label (with their paddings), and the texts' content widths
-    var parts: (icon: Double, iconWidth: Double, middle: Double, label: Double, labelWidth: Double) {
+    init(name: String, kind: String, x: Double, length: Double, top: Double, height: Double, props: ItemProps,
+         middle: Double = 0, graphValues: [Double] = [], alias: NSImage? = nil)
+    {
+        self.name = name
+        self.kind = kind
+        self.x = x
+        self.length = length
+        self.top = top
+        self.height = height
+        self.props = props
+        self.middle = middle
+        self.graphValues = graphValues
+        self.alias = alias
         let measure: (TextProps) -> Double = Fonts.width, image: (ImageProps) -> Double = Images.width
         var cursor = x
         let icon = cursor, iconWidth = Layout.contentWidth(props.icon, measure: measure, image: image)
@@ -82,12 +117,20 @@ struct PlacedItem {
         let middleX = cursor
         cursor += middle
         let labelWidth = Layout.contentWidth(props.label, measure: measure, image: image)
-        return (icon, iconWidth, middleX, cursor, labelWidth)
+        parts = (icon, iconWidth, middleX, cursor, labelWidth)
+    }
+
+    var rect: NSRect { NSRect(x: x, y: top, width: length, height: height) }
+
+    /// The same drawing: what it shows and where (its parts follow from these).
+    static func == (a: PlacedItem, b: PlacedItem) -> Bool {
+        a.name == b.name && a.kind == b.kind && a.x == b.x && a.length == b.length && a.top == b.top && a.height == b.height
+            && a.middle == b.middle && a.alias === b.alias && a.graphValues == b.graphValues && a.props == b.props
     }
 }
 
 /// How a window's own background looks: the bar's, or a popup's.
-struct PanelStyle {
+struct PanelStyle: Equatable {
     var color = ARGB.clear
     var borderColor = ARGB.clear
     var borderWidth = 0.0
@@ -122,6 +165,27 @@ struct PanelStyle {
 final class BarView: NSView {
     var style = PanelStyle()
     var items: [PlacedItem] = []
+    /// the size of the last drawing: a resized window draws again
+    private(set) var drawnSize = NSSize.zero
+
+    /// New items and style; a redraw (and new glass views) only when they change, so a
+    /// script setting the same label, or an animation frame of another window, costs nothing.
+    /// False when nothing changed.
+    @discardableResult
+    func show(_ items: [PlacedItem], style: PanelStyle) -> Bool {
+        guard items != self.items || style != self.style || bounds.size != drawnSize else { return false }
+        self.items = items
+        self.style = style
+        needsDisplay = true
+        return true
+    }
+
+    /// Redraws just the texts that scroll.
+    func redrawScrolling() {
+        for item in items where item.props.scrollTexts && (item.props.icon.scrolls || item.props.label.scrolls) {
+            setNeedsDisplay(item.rect.insetBy(dx: -4, dy: 0))
+        }
+    }
 
     var onItemEntered: ((String) -> Void)?
     var onItemExited: ((String) -> Void)?
@@ -143,6 +207,7 @@ final class BarView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        drawnSize = bounds.size
         NSGraphicsContext.current?.cgContext.setShouldSmoothFonts(style.fontSmoothing)
         let inset = style.borderWidth / 2
         let rect = bounds.insetBy(dx: inset, dy: inset)
@@ -202,11 +267,7 @@ final class BarView: NSView {
         }
         NSGraphicsContext.saveGraphicsState()
         if text.width != nil || scroll { NSRect(x: start, y: 0, width: width, height: bounds.height).clip() }
-        // sketchybar's baseline: below the middle by half of the line's ascent minus its
-        // descent, rounded down on its y-up bar
-        var ascent: CGFloat = 0, descent: CGFloat = 0
-        CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [.font: font])), &ascent, &descent, nil)
-        let baseline = mid + ceil((ascent - descent) / 2) - text.yOffset
+        let baseline = mid + Fonts.baselineOffset(string, font) - text.yOffset
         // without .usesLineFragmentOrigin the rect's origin is the baseline
         NSAttributedString(string: string, attributes: Fonts.attributes(text))
             .draw(with: NSRect(x: textX, y: baseline, width: 1e5, height: 0), options: [])
@@ -472,7 +533,6 @@ final class BarWindow {
         panel.level = Self.level(bar.topmost)
         panel.collectionBehavior = Self.behavior(sticky: bar.sticky)
         panel.hasShadow = bar.shadow
-        view.style = PanelStyle(bar: bar)
         setBlur(bar.glass == "off" ? bar.blurRadius : 0)
     }
 
@@ -481,8 +541,7 @@ final class BarWindow {
         panel.level = popup.topmost ? .popUpMenu : NSWindow.Level(rawValue: Self.level(bar.topmost).rawValue + 1)
         panel.collectionBehavior = Self.behavior(sticky: bar.sticky)
         panel.hasShadow = false
-        view.style = PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing)
-        setBlur(view.style.glass == "off" ? popup.blurRadius : 0)
+        setBlur(popup.background.drawing && popup.background.glass != "off" ? 0 : popup.blurRadius)
     }
 
     private static func level(_ topmost: String) -> NSWindow.Level {
@@ -534,5 +593,35 @@ final class BarWindow {
             Glass.update(glass, style: background.background.glass, tint: background.background.color,
                          cornerRadius: min(background.background.cornerRadius, background.rect.height / 2))
         }
+    }
+}
+
+/// Calls `tick` at each refresh of the view's display (its display link: 60 or 120 Hz,
+/// nothing while the display sleeps), or 60 times a second without a view.
+final class FrameTicker: NSObject {
+    private let tick: () -> Void
+    private var link: CADisplayLink?
+    private var timer: Timer?
+
+    init(view: NSView?, tick: @escaping () -> Void) {
+        self.tick = tick
+        super.init()
+        if let view {
+            let link = view.displayLink(target: self, selector: #selector(step))
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        } else {
+            let timer = Timer(timeInterval: 1 / framesPerSecond, repeats: true) { [weak self] _ in self?.tick() }
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
+        }
+    }
+
+    @objc private func step() { tick() }
+
+    /// The link holds its target: stop it to let both go.
+    func stop() {
+        link?.invalidate()
+        timer?.invalidate()
     }
 }

@@ -17,7 +17,7 @@ final class BarApp {
     private var popups: [String: BarWindow] = [:]
     private var timers: [String: Timer] = [:]
     private var aliasTimer: Timer?
-    private var frameTimer: Timer?
+    private var frameTimer: FrameTicker?
     private var scrollTimer: Timer?
     private var layoutPending = false
     private var hotload: DispatchSourceFileSystemObject?
@@ -341,20 +341,21 @@ final class BarApp {
     }
 
     /// Frames at 60 Hz while something animates.
+    /// Frames while something animates, at the display's refresh rate (120 Hz on ProMotion):
+    /// only the windows whose items moved draw again.
     private func startFrames() {
         guard frameTimer == nil else { return }
-        let timer = Timer(timeInterval: 1 / framesPerSecond, repeats: true) { [unowned self] _ in
+        // a shown bar's display link: a hidden one's does not fire
+        frameTimer = FrameTicker(view: windows.first { $0.panel.isVisible }?.view) { [unowned self] in
             if self.model.isBarAnimating { self.configureWindows(layout: false) }
             self.layoutNow()
             self.model.endFinishedAnimations()
             if !self.model.isAnimating {
                 self.layoutNow() // the last frame, at the targets
-                self.frameTimer?.invalidate()
+                self.frameTimer?.stop()
                 self.frameTimer = nil
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        frameTimer = timer
     }
 
     /// Redraws while texts scroll (`scroll_texts`).
@@ -365,7 +366,7 @@ final class BarApp {
             scrollTimer = nil
         } else if scrollTimer == nil {
             let timer = Timer(timeInterval: 1 / 20, repeats: true) { [unowned self] _ in
-                for window in self.windows + self.popups.values where window.view.scrolls { window.view.needsDisplay = true }
+                for window in self.windows + self.popups.values where window.view.scrolls { window.view.redrawScrolling() }
             }
             RunLoop.main.add(timer, forMode: .common)
             scrollTimer = timer
@@ -386,6 +387,11 @@ final class BarApp {
         for window in windows { window.panel.orderOut(nil) }
         windows = []
         configureWindows()
+        if let ticker = frameTimer { // its display link was a window's that is gone
+            ticker.stop()
+            frameTimer = nil
+            startFrames()
+        }
     }
 
     /// A window for each display the bar is on, at its place, shown or hidden.
@@ -518,10 +524,7 @@ final class BarApp {
                 frames[shown[index].name, default: [:]]["display-\(window.display)"] = Box(x: x, y: 0, width: lengths[index], height: height)
                 anchors[shown[index].name] = (NSRect(x: frame.minX + x, y: frame.minY, width: lengths[index], height: frame.height), window.display)
             }
-            window.view.items = brackets(around: items, height: height) + items
-            window.view.style = PanelStyle(bar: bar)
-            window.view.needsDisplay = true
-            window.updateGlass()
+            if window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar)) { window.updateGlass() }
         }
         layoutPopups(bar: bar, anchors: &anchors, frames: &frames)
         model.frames = frames
@@ -590,9 +593,7 @@ final class BarApp {
             frames[children[index].name, default: [:]]["popup.\(parent.name)"] = Box(x: place.x, y: place.y, width: lengths[index], height: row)
             anchors[children[index].name] = (NSRect(x: x + place.x, y: y + laid.height - place.y - row, width: lengths[index], height: row), anchor.display)
         }
-        window.view.items = items
-        window.view.needsDisplay = true
-        window.updateGlass()
+        if window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing)) { window.updateGlass() }
         window.panel.orderFrontRegardless()
     }
 

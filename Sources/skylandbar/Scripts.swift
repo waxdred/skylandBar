@@ -30,8 +30,11 @@ final class ScriptRunner {
         }
     }
 
+    /// the bar's own, read once (each script used to copy it again)
+    private lazy var inherited = ProcessInfo.processInfo.environment
+
     var environment: [String: String] {
-        var env = ProcessInfo.processInfo.environment
+        var env = inherited
         let path = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         env["PATH"] = "\(shimDir):\(path):/opt/homebrew/bin:/usr/local/bin"
         env["CONFIG_DIR"] = configDir
