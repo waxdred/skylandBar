@@ -182,6 +182,11 @@ What makes this possible, for any config:
   triggers it (`exec-on-workspace-change`), remove that line.
 - skyland pushes its workspaces and window title to skylandbar while it runs, and to
   sketchybar otherwise.
+- **Windows below the bar**: skylandbar tells skyland the room it takes at the top
+  (`height` + `y_offset`, the notch height when a notched display shows it; 0 at the
+  bottom or hidden) when it starts, its config changes, or skyland restarts, with
+  skyland's `bar-height` command. No `bar-height` to keep in sync in skyland's config;
+  quitting the bar goes back to it.
 - **Built-in workspaces and window title, no scripts**: skylandbar asks skyland (or AeroSpace)
   itself, on each of its events:
 

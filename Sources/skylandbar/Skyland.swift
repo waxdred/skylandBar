@@ -52,6 +52,13 @@ enum SkylandSocket {
         }
     }
 
+    /// Runs a command and waits for its answer, on this thread (the bar quitting).
+    static func runNow(_ args: [String]) {
+        guard let fd = open() else { return }
+        if send(fd, args) { _ = receive(fd) }
+        close(fd)
+    }
+
     private static func connect(_ path: String) -> Int32? {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         if fd < 0 { return nil }

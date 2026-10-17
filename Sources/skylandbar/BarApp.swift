@@ -33,6 +33,8 @@ final class BarApp {
     private var windowsTimer: Timer?
     /// a skyland query on its way, and whether another is wanted after it
     private var skylandAsking = false
+    /// the bar's height skyland was told (`bar-height`), nil: not yet / skyland restarted
+    private var skylandBarHeight: Int?
     private var skylandAskAgain = false
     private var lastWorkspaceScroll = 0.0
     /// the TOML config has [vars.dark] / [vars.light]: it loads again when the appearance changes
@@ -68,7 +70,11 @@ final class BarApp {
             }
             self.scripts.run(self.model.scripts(for: event, info: info))
         }
-        skyland.onConnect = { [unowned self] in self.askSkyland() }
+        skyland.onConnect = { [unowned self] in
+            self.askSkyland()
+            self.skylandBarHeight = nil // a restarted skyland forgot it
+            self.tellSkylandBarHeight()
+        }
         skyland.onEvent = { [unowned self] event, env in
             if event != "skyland_binding" && event != "skyland_mode_change" && event != "aerospace_mode_change" {
                 self.focusChanged()
@@ -111,6 +117,7 @@ final class BarApp {
     }
 
     func quit() {
+        if skylandBarHeight != nil { SkylandSocket.runNow(["bar-height", "default"]) } // windows back to the config's bar-height
         server.stop()
         scripts.terminateAll()
         for window in windows + popups.values { window.panel.orderOut(nil) }
@@ -510,6 +517,24 @@ final class BarApp {
             if hidden { window.panel.orderOut(nil) } else { window.panel.orderFrontRegardless() }
         }
         if layout { setNeedsLayout() }
+        tellSkylandBarHeight()
+    }
+
+    /// skyland lays windows out below the bar: tells it the room the bar takes at the top
+    /// (0 at the bottom or hidden) when it changes. From the bar's set properties, not the
+    /// animated ones: skyland gets the final height once, not every frame.
+    /// One value for every display: the notch height when a notched display shows it.
+    private func tellSkylandBarHeight() {
+        let bar = model.bar
+        var height = 0
+        if bar.position != "bottom", bar.hidden != "on" {
+            let notched = NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
+            let tallest = notched && bar.notchDisplayHeight > 0 ? max(bar.height, bar.notchDisplayHeight) : bar.height
+            height = Int((tallest + bar.yOffset).rounded(.up))
+        }
+        guard height != skylandBarHeight else { return }
+        skylandBarHeight = height
+        SkylandSocket.run(["bar-height", String(height)])
     }
 
     private func makeWindow(_ display: Int) -> BarWindow {
