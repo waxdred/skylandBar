@@ -336,6 +336,7 @@ final class BarApp {
                 say(error.message)
             case .success(let plan):
                 configUsesAppearance = plan.usesAppearance
+                watchVarsFiles(plan.varsFiles)
                 for step in plan.steps {
                     let answer = handle(step.arguments)
                     let problems = answer.text.split(separator: "\n").filter { $0.hasPrefix("[") }
@@ -346,6 +347,28 @@ final class BarApp {
                 scripts.run(model.spaceChange().filter { run in model.item(named: run.item)?.kind == "space" })
         }
         setNeedsLayout()
+    }
+
+    private var varsWatch: [DispatchSourceFileSystemObject] = []
+
+    /// A vars_file changed (skyland wrote its theme): load the config again, which watches
+    /// the new file.
+    private func watchVarsFiles(_ files: [String]) {
+        for source in varsWatch { source.cancel() }
+        varsWatch = files.compactMap { file in
+            let fd = open(file, O_EVTONLY)
+            guard fd >= 0 else { return nil }
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+            source.setEventHandler { [weak self] in
+                guard let self else { return }
+                for source in self.varsWatch { source.cancel() }
+                self.varsWatch = []
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.reload(nil) }
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            return source
+        }
     }
 
     private func reload(_ path: String?) {

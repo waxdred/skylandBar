@@ -18,6 +18,11 @@
 # - SF Pro, 11 pt at least, no Thin / Light weights; SF Symbols for icons; an 8 pt grid.
 # - Reduce Transparency and Increase Contrast change the glass by themselves; Reduce Motion
 #   ends skylandbar's animations at once.
+# - skyland's theme: its accent (ACCENT in ~/.cache/skyland/theme.env, written by
+#   skyland-theme) tints the glass lightly (glass_tint, 8 %), the hover (14 %) and the
+#   selection's lens (30 %); the text stays primary / secondary. Without skyland, systemBlue.
+
+vars_file = "~/.cache/skyland/theme.env"
 
 [vars]
 font = "SF Pro"
@@ -27,14 +32,16 @@ radius_row = 12
 radius_small = 8
 # hover: easeInOut 0.15 s (skylandbar's hover state); springs about 0.3 s
 spring = 18
+# from the accent (skyland's, else systemBlue): still glass, only tinted
+glass_tint = "${accent@0.08}"
+accent_soft = "${accent@0.30}"   # the selection's lens
 
 [vars.dark]
 primary = "0xffffffff"     # .primary
 secondary = "0x99ffffff"   # .secondary (60 %)
 tertiary = "0x4cffffff"    # .tertiary (30 %)
-hover = "0x1affffff"       # primary at 0.10: a flat highlight; the selection is a lens
-accent = "0xff0a84ff"      # systemBlue
-accent_soft = "0x260a84ff" # accent at 0.15: tinted icon backgrounds
+hover = "${accent@0.14}"   # a flat highlight in the accent; the selection is a lens
+accent = "${ACCENT:-0xff0a84ff}" # skyland's accent, else systemBlue
 green = "0xff30d158"
 orange = "0xffff9f0a"
 red = "0xffff453a"
@@ -45,9 +52,8 @@ shadow = "0x66000000"
 primary = "0xff000000"
 secondary = "0x99000000"
 tertiary = "0x4c000000"
-hover = "0x14000000"
-accent = "0xff007aff"
-accent_soft = "0x26007aff"
+hover = "${accent@0.12}"
+accent = "${ACCENT:-0xff007aff}"
 green = "0xff34c759"
 orange = "0xffff9500"
 red = "0xffff3b30"

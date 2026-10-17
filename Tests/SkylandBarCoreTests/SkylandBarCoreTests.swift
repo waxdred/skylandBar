@@ -853,6 +853,26 @@ final class LiquidGlassTests: XCTestCase {
     }
 
     /// The files shipped in examples/ and themes/ load without an error.
+    /// skyland's theme as vars: vars_file over [vars], defaults and opacities
+    func testVarsFile() throws {
+        let text = """
+            vars_file = "~/.cache/theme.env"
+            [vars]
+            accent = "${ACCENT:-0xff0a84ff}"
+            [bar]
+            color = "${accent@0.1}"
+            border_color = "${MISSING:-0xff000000@0.5}"
+            """
+        let env = "# made by skyland-theme\nACCENT=0xffffb4ac\nTEXT = '0xfff7ddda'\n"
+        let read = { (path: String) in path == "/home/.cache/theme.env" ? env : nil }
+        let plan = try ConfigFile.plan(text, environment: ["HOME": "/home"], read: read).get()
+        XCTAssertEqual(plan.varsFiles, ["/home/.cache/theme.env"])
+        XCTAssertEqual(plan.steps.first?.arguments, ["--bar", "color=0x1affb4ac", "border_color=0x80000000"])
+        // no file: the defaults
+        let bare = try ConfigFile.plan(text, environment: ["HOME": "/home"]).get()
+        XCTAssertEqual(bare.steps.first?.arguments, ["--bar", "color=0x1a0a84ff", "border_color=0x80000000"])
+    }
+
     func testShippedConfigs() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let read = { (path: String) in try? String(contentsOfFile: path, encoding: .utf8) }

@@ -25,7 +25,7 @@ workspaces = { animation = "tanh", animation_frames = "${spring}" }
 type = "bracket"
 name = "workspaces.glass"
 members = ["/^ws\\./"]
-background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true }
 
 # --- center: the focused window, its own glass capsule --------------------------------------
 
@@ -36,7 +36,7 @@ position = "center"
 title = { app_icon = "on", format = "app_title" }
 label = { max_chars = 48, padding_left = 6, padding_right = 14 }
 icon = { padding_left = 8, background = { height = 22, image.scale = 0.55 } }
-background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true }
 
 # --- right: status, one glass group; a click opens a glass panel ----------------------------
 
@@ -101,5 +101,5 @@ background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 type = "bracket"
 name = "status.glass"
 members = ["volume", "battery", "clock"]
-background = { glass = "regular", height = 36, corner_radius = 0, drawing = true }
+background = { glass = "regular", color = "${glass_tint}", height = 36, corner_radius = 0, drawing = true }
 

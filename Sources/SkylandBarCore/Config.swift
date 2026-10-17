@@ -7,8 +7,10 @@ import Foundation
 //   hotload = true              --hotload on        (these two first: after a [section],
 //   exec = ["~/x/start.sh"]     run with bash once   a key belongs to that section)
 //
-//   [vars]                      ${name} in any string (then the environment: ${HOME})
-//   accent = "0xffcba6f7"
+//   vars_file = "~/.cache/skyland/theme.env"   NAME=value lines, over the [vars]; read again
+//                                              when it changes (skyland's theme colors)
+//   [vars]                      ${name} in any string (then the environment: ${HOME});
+//   accent = "0xffcba6f7"       ${name:-default}, ${color@0.1} (the color at that opacity)
 //
 //   [bar]                       --bar
 //   height = 32
@@ -45,6 +47,8 @@ public struct ConfigPlan: Equatable {
     public var exec: [String] = []
     /// it has [vars.dark] or [vars.light]: load it again when the appearance changes
     public var usesAppearance = false
+    /// its vars_file paths: load it again when one changes
+    public var varsFiles: [String] = []
 }
 
 public struct ConfigError: Error, Equatable, CustomStringConvertible {
@@ -53,7 +57,7 @@ public struct ConfigError: Error, Equatable, CustomStringConvertible {
 }
 
 public enum ConfigFile {
-    public static let sections = ["include", "vars", "bar", "defaults", "event", "item", "hotload", "exec"]
+    public static let sections = ["include", "vars_file", "vars", "bar", "defaults", "event", "item", "hotload", "exec"]
     public static let types = ["item", "space", "alias", "graph", "slider", "bracket", "workspaces", "title", "notch"]
 
     /// The commands of a file and of the files it includes (`include = "theme.toml"`, before
@@ -69,9 +73,13 @@ public enum ConfigFile {
             case .failure(let error): return .failure(error)
         }
         var roots: [TOMLTable] = []
-        for path in strings(root["include"]) {
+        func resolve(_ path: String) -> String {
             var full = path.hasPrefix("~/") ? (environment["HOME"] ?? "~") + path.dropFirst(1) : path
             if !full.hasPrefix("/"), let dir = environment["CONFIG_DIR"] { full = "\(dir)/\(full)" }
+            return full
+        }
+        for path in strings(root["include"]) {
+            let full = resolve(path)
             guard let included = read(full) else { return .failure(ConfigError(message: "include '\(path)': cannot read \(full)")) }
             switch table(included, "\(path): ") {
                 case .success(let table):
@@ -98,6 +106,20 @@ public enum ConfigFile {
                         continue
                     }
                     vars[key] = scalar(value, key: key)
+                }
+            }
+        }
+        // vars_file: NAME=value lines over every [vars]; a missing file is no error (the
+        // theme's defaults stay)
+        for file in roots {
+            for path in strings(file["vars_file"]) {
+                let full = resolve(path)
+                plan.varsFiles.append(full)
+                for line in (read(full) ?? "").split(separator: "\n") {
+                    let text = line.trimmingCharacters(in: .whitespaces)
+                    guard !text.hasPrefix("#"), let equal = text.firstIndex(of: "=") else { continue }
+                    let value = text[text.index(after: equal)...].trimmingCharacters(in: .whitespaces)
+                    vars[String(text[..<equal]).trimmingCharacters(in: .whitespaces)] = value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
                 }
             }
         }
@@ -228,19 +250,44 @@ public enum ConfigFile {
         }
     }
 
-    /// `${name}`: a var, else an environment variable, else left as it is.
-    static func substitute(_ text: String, _ vars: [String: String], _ environment: [String: String]) -> String {
-        guard text.contains("${") else { return text }
+    /// `${name}`: a var (its own ${...} filled too), else an environment variable, else
+    /// `${name:-default}`'s default, else left as it is. `${name@0.1}`: a 0xAARRGGBB color at
+    /// that opacity.
+    static func substitute(_ text: String, _ vars: [String: String], _ environment: [String: String], depth: Int = 0) -> String {
+        guard text.contains("${"), depth < 8 else { return text }
         var result = ""
         var rest = Substring(text)
         while let start = rest.range(of: "${") {
             result += rest[..<start.lowerBound]
             guard let end = rest[start.upperBound...].firstIndex(of: "}") else { break }
-            let name = String(rest[start.upperBound ..< end])
-            result += vars[name] ?? environment[name] ?? "${\(name)}"
+            let whole = String(rest[start.upperBound ..< end])
+            var name = whole
+            var alpha: Double?
+            if let at = name.lastIndex(of: "@"), let value = Double(name[name.index(after: at)...]) {
+                alpha = value
+                name = String(name[..<at])
+            }
+            var fallback: String?
+            if let dash = name.range(of: ":-") {
+                fallback = String(name[dash.upperBound...])
+                name = String(name[..<dash.lowerBound])
+            }
+            if let found = vars[name] ?? environment[name] ?? fallback {
+                let value = substitute(found, vars, environment, depth: depth + 1)
+                result += alpha.map { withAlpha(value, $0) } ?? value
+            } else {
+                result += "${\(whole)}"
+            }
             rest = rest[rest.index(after: end)...]
         }
         return result + rest
+    }
+
+    /// 0xAARRGGBB with its alpha replaced; anything else as it is
+    static func withAlpha(_ color: String, _ alpha: Double) -> String {
+        guard color.count == 10, color.lowercased().hasPrefix("0x"), let value = UInt32(color.dropFirst(2), radix: 16) else { return color }
+        let a = UInt32((min(max(alpha, 0), 1) * 255).rounded())
+        return String(format: "0x%08x", (a << 24) | (value & 0x00FF_FFFF))
     }
 }
 
