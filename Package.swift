@@ -1,0 +1,29 @@
+// swift-tools-version: 5.9
+// Swift 5 language mode on purpose: AppKit, sockets and run loop callbacks without the
+// strict concurrency annotations; the core (SkylandBarCore) is plain value types.
+import PackageDescription
+
+let package = Package(
+    name: "skylandbar",
+    platforms: [.macOS(.v13)],
+    products: [
+        .executable(name: "skylandbar", targets: ["skylandbar"]),
+        .library(name: "SkylandBarCore", targets: ["SkylandBarCore"]),
+    ],
+    targets: [
+        // commands, properties, model, layout: no AppKit, unit tested
+        .target(name: "SkylandBarCore"),
+        // the bar: socket server and client, windows, drawing, events, scripts
+        .executableTarget(
+            name: "skylandbar",
+            dependencies: ["SkylandBarCore"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("IOKit"),
+                .linkedFramework("CoreAudio"),
+                .linkedFramework("AudioToolbox"),
+            ]
+        ),
+        .testTarget(name: "SkylandBarCoreTests", dependencies: ["SkylandBarCore"]),
+    ]
+)

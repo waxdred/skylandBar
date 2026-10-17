@@ -1,0 +1,69 @@
+import Foundation
+import SkylandBarCore
+
+/// Runs item scripts and the config like sketchybar: `bash -c`, with NAME, SENDER, INFO...
+/// and a PATH whose first directory has a `sketchybar` that is this binary, so configs and
+/// plugins written for sketchybar talk to skylandbar unchanged.
+final class ScriptRunner {
+    var configDir: String
+    let shimDir: String
+
+    init(configDir: String) {
+        self.configDir = configDir
+        shimDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/skylandbar/bin").path
+        makeShim()
+    }
+
+    private func makeShim() {
+        let manager = FileManager.default
+        try? manager.createDirectory(atPath: shimDir, withIntermediateDirectories: true)
+        let binary = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().path
+        for name in ["sketchybar", "skylandbar"] {
+            let link = "\(shimDir)/\(name)"
+            if (try? manager.destinationOfSymbolicLink(atPath: link)) == binary { continue }
+            try? manager.removeItem(atPath: link)
+            try? manager.createSymbolicLink(atPath: link, withDestinationPath: binary)
+        }
+    }
+
+    var environment: [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let path = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = "\(shimDir):\(path):/opt/homebrew/bin:/usr/local/bin"
+        env["CONFIG_DIR"] = configDir
+        env["BAR_NAME"] = "skylandbar"
+        return env
+    }
+
+    func run(_ runs: [ScriptRun]) {
+        for run in runs { launch(["/bin/bash", "-c", run.script], env: run.env) }
+    }
+
+    /// A file runs by itself when it is executable (its shebang), else with bash.
+    @discardableResult
+    func launch(file: String, onExit: (() -> Void)? = nil) -> Bool {
+        let command = FileManager.default.isExecutableFile(atPath: file) ? [file] : ["/bin/bash", file]
+        return launch(command, env: [:], onExit: onExit)
+    }
+
+    @discardableResult
+    func launch(_ command: [String], env extra: [String: String], onExit: (() -> Void)? = nil) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: command[0])
+        process.arguments = Array(command.dropFirst())
+        var env = environment
+        for (key, value) in extra { env[key] = value }
+        process.environment = env
+        process.currentDirectoryURL = URL(fileURLWithPath: configDir)
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        if let onExit { process.terminationHandler = { _ in DispatchQueue.main.async(execute: onExit) } }
+        do {
+            try process.run()
+            return true
+        } catch {
+            FileHandle.standardError.write(Data("skylandbar: cannot run \(command.joined(separator: " ")): \(error)\n".utf8))
+            return false
+        }
+    }
+}

@@ -1,0 +1,382 @@
+import Foundation
+
+// The properties of the bar and of its items, with sketchybar's names and defaults
+// (https://felixkratz.github.io/SketchyBar/config/items). Each `apply` takes the part of
+// the key after its own prefix ("background.color" -> background.apply("color", ...)) and
+// returns an error message, or nil when the value was taken.
+
+public struct ShadowProps: Equatable {
+    public var drawing = false
+    public var color = ARGB.black
+    public var angle = 30.0
+    public var distance = 5.0
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "drawing": return Value.setBool(&drawing, value)
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "angle": return Value.setNumber(&angle, value)
+            case "distance": return Value.setNumber(&distance, value)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        ["drawing": drawing ? "on" : "off", "color": color.description, "angle": angle, "distance": distance]
+    }
+}
+
+public struct BackgroundProps: Equatable {
+    public var drawing = false
+    public var color = ARGB.clear
+    public var borderColor = ARGB.clear
+    public var borderWidth = 0.0
+    public var height = 0.0 // 0: the bar's height
+    public var cornerRadius = 0.0
+    public var paddingLeft = 0.0
+    public var paddingRight = 0.0
+    public var xOffset = 0.0
+    public var yOffset = 0.0
+    public var clip = 0.0
+    /// a file, `app.<bundle id>` or `media`; drawn from milestone 2, kept meanwhile
+    public var image = ""
+    public var imageProps: [String: String] = [:]
+    public var shadow = ShadowProps()
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "drawing": return Value.setBool(&drawing, value)
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "border_color": return Value.setColor(&borderColor, value, part: rest)
+            case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
+            case "height": return Value.setNumber(&height, value, minimum: 0)
+            case "corner_radius": return Value.setNumber(&cornerRadius, value, minimum: 0)
+            case "padding_left": return Value.setNumber(&paddingLeft, value)
+            case "padding_right": return Value.setNumber(&paddingRight, value)
+            case "x_offset": return Value.setNumber(&xOffset, value)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "clip": return Value.setNumber(&clip, value, minimum: 0)
+            case "image":
+                if let rest { imageProps[rest] = value } else { image = value }
+                return nil
+            case "shadow": return rest.map { shadow.apply($0, value) } ?? Value.setBool(&shadow.drawing, value)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "drawing": drawing ? "on" : "off", "color": color.description, "border_color": borderColor.description,
+            "border_width": borderWidth, "height": height, "corner_radius": cornerRadius,
+            "padding_left": paddingLeft, "padding_right": paddingRight, "x_offset": xOffset, "y_offset": yOffset,
+            "clip": clip, "image": image, "shadow": shadow.json,
+        ]
+    }
+}
+
+/// The icon or the label of an item.
+public struct TextProps: Equatable {
+    public var drawing = true
+    public var highlight = false
+    public var string = ""
+    public var color = ARGB.white
+    public var highlightColor = ARGB.black
+    public var paddingLeft = 0.0
+    public var paddingRight = 0.0
+    public var yOffset = 0.0
+    public var font = FontSpec.standard
+    /// nil: as wide as the text
+    public var width: Double? = nil
+    public var align = "left"
+    public var maxChars = 0
+    public var scrollDuration = 100.0
+    public var background = BackgroundProps()
+    public var shadow = ShadowProps()
+
+    public init() {}
+
+    /// The text as drawn: `max_chars` cut.
+    public var shown: String {
+        maxChars > 0 && string.count > maxChars ? String(string.prefix(maxChars)) : string
+    }
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "drawing": return Value.setBool(&drawing, value)
+            case "highlight": return Value.setBool(&highlight, value)
+            case "string":
+                string = value
+                return nil
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "highlight_color": return Value.setColor(&highlightColor, value, part: rest)
+            case "padding_left": return Value.setNumber(&paddingLeft, value)
+            case "padding_right": return Value.setNumber(&paddingRight, value)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "font":
+                switch rest {
+                    case nil:
+                        guard let parsed = FontSpec.parse(value, base: font) else { return "'\(value)' is not a font (Family:Style:Size)" }
+                        font = parsed
+                        return nil
+                    case "family"?:
+                        font.family = value
+                        return nil
+                    case "style"?:
+                        font.style = value
+                        return nil
+                    case "size"?:
+                        return Value.setNumber(&font.size, value, minimum: 1)
+                    default:
+                        return unknownProperty
+                }
+            case "width":
+                if value == "dynamic" {
+                    width = nil
+                    return nil
+                }
+                var fixed = 0.0
+                if let error = Value.setNumber(&fixed, value, minimum: 0) { return error }
+                width = fixed
+                return nil
+            case "align": return Value.oneOf(&align, value, ["left", "center", "right"])
+            case "max_chars":
+                guard let count = Int(value), count >= 0 else { return "'\(value)' is not a count" }
+                maxChars = count
+                return nil
+            case "scroll_duration": return Value.setNumber(&scrollDuration, value, minimum: 0)
+            case "background": return rest.map { background.apply($0, value) } ?? unknownProperty
+            case "shadow": return rest.map { shadow.apply($0, value) } ?? Value.setBool(&shadow.drawing, value)
+            default: return unknownProperty
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "drawing": drawing ? "on" : "off", "highlight": highlight ? "on" : "off", "value": string,
+            "color": color.description, "highlight_color": highlightColor.description,
+            "padding_left": paddingLeft, "padding_right": paddingRight, "y_offset": yOffset,
+            "font": font.description, "width": width.map { $0 as Any } ?? "dynamic", "align": align,
+            "max_chars": maxChars, "scroll_duration": scrollDuration,
+            "background": background.json, "shadow": shadow.json,
+        ]
+    }
+}
+
+public let itemPositions = ["left", "right", "center", "q", "e"]
+
+public struct ItemProps: Equatable {
+    public var drawing = true
+    public var position = "left"
+    /// all | active | a list of display numbers "1,2"
+    public var display = "all"
+    /// macOS Spaces the item is shown on: all | "1,2" (kept for configs, skyland has its own workspaces)
+    public var space = "all"
+    public var ignoreAssociation = false
+    public var yOffset = 0.0
+    /// nil: as wide as its icon and label
+    public var width: Double? = nil
+    public var blurRadius = 0.0
+    public var scrollTexts = false
+    public var script = ""
+    public var clickScript = ""
+    /// seconds between `routine` updates, 0: none
+    public var updateFreq = 0.0
+    /// on | off | when_shown
+    public var updates = "when_shown"
+    public var icon = TextProps()
+    public var label = TextProps()
+    public var background = BackgroundProps()
+    /// popup.*, graph.*, slider.*, alias.*: milestone 2, kept meanwhile so configs load
+    public var extra: [String: String] = [:]
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "icon", "label":
+                guard let rest else {
+                    if head == "icon" { icon.string = value } else { label.string = value }
+                    return nil
+                }
+                return head == "icon" ? icon.apply(rest, value) : label.apply(rest, value)
+            case "drawing": return Value.setBool(&drawing, value)
+            case "position":
+                guard itemPositions.contains(value) || value.hasPrefix("popup.") else {
+                    return "'\(value)' is not one of \(itemPositions.joined(separator: ", ")) or popup.<item>"
+                }
+                position = value
+                return nil
+            case "display", "associated_display":
+                guard value == "all" || value == "active" || Self.isNumberList(value) else { return "'\(value)' is not all, active or display numbers" }
+                display = value
+                return nil
+            case "space", "associated_space":
+                guard value == "all" || Self.isNumberList(value) else { return "'\(value)' is not all or space numbers" }
+                space = value
+                return nil
+            case "ignore_association": return Value.setBool(&ignoreAssociation, value)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "width":
+                if value == "dynamic" {
+                    width = nil
+                    return nil
+                }
+                var fixed = 0.0
+                if let error = Value.setNumber(&fixed, value, minimum: 0) { return error }
+                width = fixed
+                return nil
+            case "blur_radius": return Value.setNumber(&blurRadius, value, minimum: 0)
+            case "scroll_texts": return Value.setBool(&scrollTexts, value)
+            case "script":
+                script = value
+                return nil
+            case "click_script":
+                clickScript = value
+                return nil
+            case "update_freq": return Value.setNumber(&updateFreq, value, minimum: 0)
+            case "updates":
+                if value == "when_shown" {
+                    updates = value
+                    return nil
+                }
+                var on = updates != "off"
+                if let error = Value.setBool(&on, value) { return error }
+                updates = on ? "on" : "off"
+                return nil
+            case "background": return rest.map { background.apply($0, value) } ?? unknownProperty
+            case "popup", "graph", "slider", "alias", "mach_helper", "shadow":
+                extra[key] = value
+                return nil
+            default: return unknownProperty
+        }
+    }
+
+    static func isNumberList(_ value: String) -> Bool {
+        !value.isEmpty && value.split(separator: ",").allSatisfy { Int($0) != nil }
+    }
+
+    /// Whether the item goes on the bar of display `number` (1-based, NSScreen order);
+    /// `active` is the display with the focus.
+    public func isShown(onDisplay number: Int, activeDisplay: Int) -> Bool {
+        switch display {
+            case "all": return true
+            case "active": return number == activeDisplay
+            default: return display.split(separator: ",").compactMap { Int($0) }.contains(number)
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "drawing": drawing ? "on" : "off", "position": position, "associated_display": display, "associated_space": space,
+            "ignore_association": ignoreAssociation ? "on" : "off", "y_offset": yOffset,
+            "width": width.map { $0 as Any } ?? "dynamic", "blur_radius": blurRadius, "scroll_texts": scrollTexts ? "on" : "off",
+            "background": background.json,
+        ]
+    }
+}
+
+public struct BarProps: Equatable {
+    public var color = ARGB(0x4400_0000)
+    public var borderColor = ARGB(0xFFFF_0000)
+    public var borderWidth = 0.0
+    /// top | bottom
+    public var position = "top"
+    public var height = 25.0
+    /// height on displays with a notch, 0: `height`
+    public var notchDisplayHeight = 0.0
+    public var margin = 0.0
+    public var yOffset = 0.0
+    public var cornerRadius = 0.0
+    public var blurRadius = 0.0
+    public var paddingLeft = 0.0
+    public var paddingRight = 0.0
+    public var notchWidth = 200.0
+    public var notchOffset = 0.0
+    /// main | all | display numbers "1,2"
+    public var display = "all"
+    /// on | off | current
+    public var hidden = "off"
+    /// on | off | window
+    public var topmost = "off"
+    public var sticky = true
+    public var fontSmoothing = false
+    public var shadow = false
+
+    public init() {}
+
+    public mutating func apply(_ key: String, _ value: String) -> String? {
+        let (head, rest) = splitKey(key)
+        switch head {
+            case "color": return Value.setColor(&color, value, part: rest)
+            case "border_color": return Value.setColor(&borderColor, value, part: rest)
+            case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
+            case "position": return Value.oneOf(&position, value, ["top", "bottom"])
+            case "height": return Value.setNumber(&height, value, minimum: 0)
+            case "notch_display_height": return Value.setNumber(&notchDisplayHeight, value, minimum: 0)
+            case "margin": return Value.setNumber(&margin, value)
+            case "y_offset": return Value.setNumber(&yOffset, value)
+            case "corner_radius": return Value.setNumber(&cornerRadius, value, minimum: 0)
+            case "blur_radius": return Value.setNumber(&blurRadius, value, minimum: 0)
+            case "padding_left": return Value.setNumber(&paddingLeft, value)
+            case "padding_right": return Value.setNumber(&paddingRight, value)
+            case "notch_width": return Value.setNumber(&notchWidth, value, minimum: 0)
+            case "notch_offset": return Value.setNumber(&notchOffset, value)
+            case "display":
+                guard value == "main" || value == "all" || ItemProps.isNumberList(value) else {
+                    return "'\(value)' is not main, all or display numbers"
+                }
+                display = value
+                return nil
+            case "hidden":
+                if value == "current" {
+                    hidden = value
+                    return nil
+                }
+                var on = hidden != "off"
+                if let error = Value.setBool(&on, value) { return error }
+                hidden = on ? "on" : "off"
+                return nil
+            case "topmost":
+                if value == "window" {
+                    topmost = value
+                    return nil
+                }
+                var on = topmost != "off"
+                if let error = Value.setBool(&on, value) { return error }
+                topmost = on ? "on" : "off"
+                return nil
+            case "sticky": return Value.setBool(&sticky, value)
+            case "font_smoothing": return Value.setBool(&fontSmoothing, value)
+            case "shadow": return Value.setBool(&shadow, value)
+            default: return unknownProperty
+        }
+    }
+
+    /// Whether there is a bar on display `number` (1-based, NSScreen order, 1 = main).
+    public func isShown(onDisplay number: Int) -> Bool {
+        switch display {
+            case "all": return true
+            case "main": return number == 1
+            default: return display.split(separator: ",").compactMap { Int($0) }.contains(number)
+        }
+    }
+
+    public var json: [String: Any] {
+        [
+            "position": position, "topmost": topmost, "sticky": sticky ? "on" : "off", "hidden": hidden,
+            "shadow": shadow ? "on" : "off", "font_smoothing": fontSmoothing ? "on" : "off", "blur_radius": blurRadius,
+            "margin": margin, "notch_display_height": notchDisplayHeight, "notch_width": notchWidth, "notch_offset": notchOffset,
+            "display": display, "color": color.description, "border_color": borderColor.description, "border_width": borderWidth,
+            "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
+            "padding_left": paddingLeft, "padding_right": paddingRight,
+        ]
+    }
+}
