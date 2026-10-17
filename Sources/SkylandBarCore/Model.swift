@@ -451,7 +451,8 @@ public final class BarModel {
     /// `open` (on, off, toggle) opens or closes it now.
     private func setNotch(_ index: Int, _ option: String, _ value: String) -> String? {
         switch option {
-            case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames", "flare":
+            case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames", "flare",
+                 "closed_width", "closed_height", "closed_corner_radius", "closed_flare":
                 guard let number = Double(value), number >= 0 else { return "'\(value)' is not a number from 0" }
             case "color":
                 guard ARGB.parse(value) != nil else { return "'\(value)' is not a color (0xAARRGGBB)" }
@@ -471,7 +472,7 @@ public final class BarModel {
                 items[index].options["open"] = open ? "on" : "off"
                 return nil
             default:
-                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare)"
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare)"
         }
         items[index].options[option] = value
         return nil

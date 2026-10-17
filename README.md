@@ -247,7 +247,9 @@ What makes this possible, for any config:
   a curve over `notch.animation_frames` (20). Its size is what the items need, `notch.width` /
   `notch.height` at least, with `notch.padding` (12), `notch.row_height` (the notch's
   height), `notch.corner_radius` (24, the bottom corners), `notch.flare` (19, the top curves
-  into the screen's edge; 14 and 6 closed) and `notch.color` (black). `notch.open=on|off|toggle`
+  into the screen's edge) and `notch.color` (black). Closed: `notch.closed_width` /
+  `notch.closed_height` (the camera's notch), `notch.closed_corner_radius` (14),
+  `notch.closed_flare` (6). `notch.open=on|off|toggle`
   opens or closes it from a script (on media_change, for example), and items can subscribe to
   `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
   one at the top middle of the main display. `notch.glass=on` (or `clear`): the same shape on the same

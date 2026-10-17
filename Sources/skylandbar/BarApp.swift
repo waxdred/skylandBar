@@ -832,7 +832,8 @@ final class BarApp {
         }
         let option = { (name: String, fallback: Double) in notch.options[name].flatMap(Double.init) ?? fallback }
         // boringNotch's shape: closed, top curves 6 and bottom corners 14; open, 19 and 24
-        let flare = 6.0, openFlare = option("flare", 19), padding = option("padding", 12), row = option("row_height", place.rect.height)
+        let flare = option("closed_flare", 6), openFlare = option("flare", 19), padding = option("padding", 12)
+        let row = option("row_height", place.rect.height)
         let children = model.popupItems(of: notch.name).filter { $0.props.drawing }
         let props = children.map { model.displayed($0) }
         let middles = zip(children, props).map { middle($0, $1) }
@@ -844,7 +845,9 @@ final class BarApp {
         }
         let horizontal = isOn(notch.options["horizontal"])
         let laid = Layout.popup(slots, horizontal: horizontal, rowHeight: row, inset: 0)
-        let closed = (width: Double(place.rect.width) + 2 * flare, height: Double(place.rect.height), radius: 14.0)
+        // closed: the camera's notch, or closed_width x closed_height (wider, it shows around it)
+        let closed = (width: option("closed_width", Double(place.rect.width)) + 2 * flare,
+                      height: option("closed_height", Double(place.rect.height)), radius: option("closed_corner_radius", 14))
         let open = (width: max(option("width", 0), laid.width + 2 * padding) + 2 * openFlare,
                     height: max(option("height", 0), closed.height + laid.height + padding),
                     radius: option("corner_radius", 24))
@@ -860,7 +863,8 @@ final class BarApp {
         }
         window.configureNotch(frame: frame, open: p > 0)
         var style = PanelStyle()
-        style.color = notch.options["color"].flatMap(ARGB.parse) ?? .black
+        let glassy = (notch.options["glass"] ?? "off") != "off"
+        style.color = glassy ? .black : notch.options["color"].flatMap(ARGB.parse) ?? .black // glass: color is its tint, closed is black
         style.cornerRadius = mix(closed.radius, open.radius, p)
         style.notch = true
         style.flare = mix(flare, openFlare, min(p, 1))
