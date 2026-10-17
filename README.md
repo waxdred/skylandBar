@@ -227,7 +227,10 @@ What makes this possible, for any config:
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes
   the glass tint. It uses `NSGlassEffectView` on macOS 26 when built with Xcode 26, and a blurred
-  material before that.
+  material before that. `background.glass=lens` inside another glass shape is a selection, as in
+  Apple's tab bars: a drop of thicker glass (what is behind a little magnified, lighter, its own
+  rim light) that does not melt into the glass around it (metal engine; elsewhere, glass). A
+  selected workspace keeps its background under the mouse.
 
 ## Permissions and limits
 

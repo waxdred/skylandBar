@@ -14,9 +14,9 @@ name = "ws"
 position = "left"
 icon = { color = "${secondary}", padding_left = 10, padding_right = 4 }
 label = { string = "{apps}", font = "${font}:Medium:11", color = "${secondary}", padding_right = 10 }
-background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
-# the one tinted element: prominence for where you are
-focused = { icon.color = "${accent}", label.color = "${primary}", background.color = "${accent_soft}" }
+background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "concentric" }
+# the one tinted element: prominence for where you are, a lens of glass in the group's glass
+focused = { icon.color = "${accent}", label.color = "${primary}", background.glass = "lens", background.color = "${accent_soft}" }
 empty = { label.string = "", icon.padding_right = 10 }
 hover = { background.color = "${hover}" }
 workspaces = { animation = "tanh", animation_frames = "${spring}" }
@@ -52,7 +52,7 @@ sketchybar --set "$NAME" label="$(date "+%a %d %b  %H:%M")"
 click_script = 'sketchybar --set "$NAME" popup.drawing=toggle'
 subscribe = ["system_woke", "mouse.exited.global"]
 hover = { background.color = "${hover}", background.drawing = true }
-background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 
 [[item]]
 name = "clock.date"
@@ -62,7 +62,7 @@ label = { string = "", font = "${font}:Semibold:13" }
 script = 'sketchybar --set "$NAME" label="$(date "+%A %d %B %Y")"'
 update_freq = 60
 hover = { background.color = "${hover}", background.drawing = true }
-background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 
 [[item]]
 name = "battery"
@@ -82,7 +82,7 @@ sketchybar --set "$NAME" icon="$icon" icon.color="$color" label="$percent%"
 '''
 subscribe = ["power_source_change", "system_woke", "appearance_change"]
 hover = { background.color = "${hover}", background.drawing = true }
-background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 
 [[item]]
 name = "volume"
@@ -95,7 +95,7 @@ sketchybar --set "$NAME" icon="$icon" label="$INFO%"
 '''
 subscribe = "volume_change"
 hover = { background.color = "${hover}", background.drawing = true }
-background = { color = "0x00000000", height = 28, corner_radius = "${radius_row}" }
+background = { color = "0x00000000", height = 28, corner_radius = "concentric" }
 
 [[item]]
 type = "bracket"

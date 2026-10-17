@@ -541,7 +541,11 @@ public final class BarModel {
                            subscriptions: component.subscriptions)
         item.parent = component.name
         item.workspace = workspace.name
-        if let hover = component.states["hover"] { item.states["hover"] = hover }
+        if var hover = component.states["hover"] {
+            // the selection (a lens) keeps its own background under the mouse
+            if props.background.glass == "lens" { hover.removeAll { $0.key.hasPrefix("background.") } }
+            item.states["hover"] = hover
+        }
         return item
     }
 

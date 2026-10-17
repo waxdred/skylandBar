@@ -648,6 +648,11 @@ final class BarWindow {
             shapes.append(GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),
                                      tint: background.background.color, style: background.background.glass))
         }
+        // a lens is a lens inside other glass only; on its own it is glass
+        let bodies = shapes.filter { $0.style != "lens" }.map { $0.rect.insetBy(dx: -1, dy: -1) }
+        for index in shapes.indices where shapes[index].style == "lens" && !bodies.contains(where: { $0.contains(shapes[index].rect) }) {
+            shapes[index].style = "regular"
+        }
         // an engine that failed (the capture stopped) gives way to the backdrop, for good
         if glass?.failed == true { glassFailed = true }
         let engine = shapes.isEmpty ? nil : glassFailed ? "backdrop" : GlassEngine.resolve(settings.engine)

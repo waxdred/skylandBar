@@ -15,7 +15,7 @@ struct GlassShape: Equatable {
     var rect: NSRect
     var radius: Double
     var tint: ARGB
-    /// regular | clear
+    /// regular | clear | lens (inside another shape: a selection, Apple's tab bar style)
     var style: String
 }
 

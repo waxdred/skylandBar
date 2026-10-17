@@ -105,7 +105,7 @@ final class MetalGlass: GlassRenderer {
             var gpuShapes = shapes.prefix(32).map { shape in
                 GPUShape(rect: SIMD4(Float(shape.rect.minX) * s, Float(shape.rect.minY) * s, Float(shape.rect.width) * s, Float(shape.rect.height) * s),
                          tint: SIMD4(Float(shape.tint.red), Float(shape.tint.green), Float(shape.tint.blue), Float(shape.tint.alpha)),
-                         radius: Float(shape.radius) * s, clear: shape.style == "clear" ? 1 : 0)
+                         radius: Float(shape.radius) * s, clear: shape.style == "clear" ? 1 : shape.style == "lens" ? 2 : 0)
             }
             let origin = capture.origin(of: window, scale: scale)
             var uniforms = GPUUniforms(size: SIMD2(Float(size.width), Float(size.height)), origin: SIMD2(Float(origin.x), Float(origin.y)),

@@ -481,6 +481,12 @@ final class WorkspaceComponentTests: XCTestCase {
         XCTAssertEqual(model.item(named: "ws.2")?.props.icon.string, "2")
         XCTAssertFalse(send(model, ["--set", "ws", "workspace.1.nope=1"]).errors.isEmpty)
 
+        // hover: a flat fill; the selected one (a lens) keeps its tint under the mouse
+        _ = send(model, ["--set", "ws", "hover.background.color=0x1affffff", "hover.icon.color=0xff00ff00",
+                         "focused.background.glass=lens", "focused.background.color=0x260a84ff"])
+        XCTAssertEqual(model.item(named: "ws.1")?.states["hover"]?.map(\.key), ["icon.color"])
+        XCTAssertEqual(model.item(named: "ws.2")?.states["hover"]?.map(\.key), ["background.color", "icon.color"])
+
         // the focus moves: the items follow; the component's options and errors
         _ = send(model, ["--set", "ws", "workspaces.monitor=off", "workspaces.scroll=off"])
         model.setWorkspaces(SkylandData.workspaces(workspacesJSON.replacingOccurrences(of: "\"workspace-is-focused\":true", with: "\"workspace-is-focused\":false"),

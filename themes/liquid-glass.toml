@@ -14,7 +14,7 @@
 #   glass_spacing merge into one, as Apple's containers do.
 # - Color sparingly: text in primary / secondary, one tinted element (the focused
 #   workspace) for prominence, system colors in their light and dark variants (reloaded when
-#   the appearance changes), a 0.04 hover fill.
+#   the appearance changes), a 0.10 hover fill, the selection a lens of glass (glass = "lens").
 # - SF Pro, 11 pt at least, no Thin / Light weights; SF Symbols for icons; an 8 pt grid.
 # - Reduce Transparency and Increase Contrast change the glass by themselves; Reduce Motion
 #   ends skylandbar's animations at once.
@@ -32,7 +32,7 @@ spring = 18
 primary = "0xffffffff"     # .primary
 secondary = "0x99ffffff"   # .secondary (60 %)
 tertiary = "0x4cffffff"    # .tertiary (30 %)
-hover = "0x0affffff"       # primary at 0.04
+hover = "0x1affffff"       # primary at 0.10: a flat highlight; the selection is a lens
 accent = "0xff0a84ff"      # systemBlue
 accent_soft = "0x260a84ff" # accent at 0.15: tinted icon backgrounds
 green = "0xff30d158"
@@ -45,7 +45,7 @@ shadow = "0x66000000"
 primary = "0xff000000"
 secondary = "0x99000000"
 tertiary = "0x4c000000"
-hover = "0x0a000000"
+hover = "0x14000000"
 accent = "0xff007aff"
 accent_soft = "0x26007aff"
 green = "0xff34c759"

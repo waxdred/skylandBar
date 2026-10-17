@@ -22,7 +22,7 @@ struct Shape {
     float4 rect;        // x, y, width, height: pixels, top-left origin
     float4 tint;        // rgb and its strength
     float radius;       // pixels
-    float clear;        // 1: clear glass
+    float clear;        // 1: clear glass, 2: a lens inside the others
     float2 pad;
 };
 
@@ -63,10 +63,13 @@ static float field(float2 px, constant Shape* shapes, int count, float k, thread
     float d = 1e5;
     float best = 1e5;
     nearest = 0;
+    bool first = true;
     for (int i = 0; i < count; i++) {
+        if (shapes[i].clear > 1.5) continue;    // lenses are drawn over the glass, not melted in
         float di = shape_distance(shapes[i], px);
         if (di < best) { best = di; nearest = i; }
-        d = (i == 0) ? di : smooth_min(d, di, k);
+        d = first ? di : smooth_min(d, di, k);
+        first = false;
     }
     return d;
 }
@@ -140,6 +143,35 @@ fragment float4 glass_fragment(VOut in [[stage_in]],
     float from_top = clamp((px.y - sh.rect.y) / max(sh.rect.w, 1.0), 0.0, 1.0);
     color += (1.0 - smoothstep(0.0, 0.55, from_top)) * (u.dark > 0.5 ? 0.05 : 0.08);
     color *= 1.0 - 0.12 * lens * max(n.y, 0.0);
+
+    // lenses: a thicker drop of glass over a selection, as Apple's tab bars. What is behind
+    // a little magnified, a lighter body under the lens's tint, its own rim lit from the top
+    // left, and a soft shade just outside it
+    for (int i = 0; i < u.count; i++) {
+        Shape ls = shapes[i];
+        if (ls.clear < 1.5) continue;
+        float dl = shape_distance(ls, px);
+        color *= 1.0 - 0.10 * (1.0 - smoothstep(0.0, 3.0 * u.scale, max(dl, 0.0))) * step(0.0, dl); // shade outside
+        if (dl > 1.0) continue;
+        float cl = clamp(0.5 - dl, 0.0, 1.0);
+        float2 c = ls.rect.xy + ls.rect.zw * 0.5;
+        float2 ml = float2(shape_distance(ls, px + float2(e, 0.0)) - shape_distance(ls, px - float2(e, 0.0)),
+                           shape_distance(ls, px + float2(0.0, e)) - shape_distance(ls, px - float2(0.0, e)));
+        ml = ml / max(length(ml), 1e-4);
+        float edge = pow(clamp(1.0 - (-dl) / (0.35 * ls.rect.w + 1.0), 0.0, 1.0), 2.0);
+        float2 lat = c + (px - c) / 1.08 - ml * edge * 2.0 * u.scale + u.origin;   // magnified, bent at its edge
+        float3 lc = backdrop_at(backdrop, s, lat, blur, u.texSize);
+        float ll = dot(lc, float3(0.2126, 0.7152, 0.0722));
+        lc = mix(float3(ll), lc, u.saturation);
+        lc = u.dark > 0.5 ? lc * 0.85 + 0.12 : lc * 0.80 + 0.22;               // lighter than the glass around
+        lc = mix(lc, ls.tint.rgb, ls.tint.a);
+        float lf = dot(ml, light);
+        float lrim = pow(clamp(1.0 - (-dl) / (1.4 * u.scale), 0.0, 1.0), 1.5);
+        lc += lrim * (0.55 * max(lf, 0.0) + 0.25 * max(-lf, 0.0));
+        float ltop = clamp((px.y - ls.rect.y) / max(ls.rect.w, 1.0), 0.0, 1.0);
+        lc += (1.0 - smoothstep(0.0, 0.5, ltop)) * 0.06;
+        color = mix(color, lc, cl);
+    }
 
     return float4(clamp(color, 0.0, 1.0) * coverage, coverage);
 }
