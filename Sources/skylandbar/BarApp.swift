@@ -31,6 +31,10 @@ final class BarApp {
     /// space_windows_change: the last INFO sent for each display, and the timer that looks
     private var spaceWindows: [Int: String] = [:]
     private var windowsTimer: Timer?
+    /// a skyland query on its way, and whether another is wanted after it
+    private var skylandAsking = false
+    private var skylandAskAgain = false
+    private var lastWorkspaceScroll = 0.0
 
     init(configPath: String?) {
         self.configPath = configPath
@@ -49,11 +53,18 @@ final class BarApp {
         scripts.barName = mach.names.first { $0 == "sketchybar" } ?? "skylandbar"
         events.onEvent = { [unowned self] event, info in
             if event == "space_change" { return self.spaceChanged() }
-            if event == "front_app_switched" { self.focusChanged() }
+            if event == "front_app_switched" {
+                self.focusChanged()
+                self.askSkyland()
+            }
             self.scripts.run(self.model.scripts(for: event, info: info))
         }
+        skyland.onConnect = { [unowned self] in self.askSkyland() }
         skyland.onEvent = { [unowned self] event, env in
-            if event != "skyland_binding" && event != "skyland_mode_change" && event != "aerospace_mode_change" { self.focusChanged() }
+            if event != "skyland_binding" && event != "skyland_mode_change" && event != "aerospace_mode_change" {
+                self.focusChanged()
+                if event != "aerospace_workspace_change" { self.askSkyland() } // sent with skyland_workspace_change
+            }
             self.scripts.run(self.model.scripts(for: event, info: env["INFO"] ?? "", env: env))
         }
         skyland.start()
@@ -124,8 +135,49 @@ final class BarApp {
         }
         if outcome.timersChanged { updateTimers() }
         if outcome.animating { startFrames() }
+        if outcome.componentsChanged { askSkyland() }
         if outcome.redraw || outcome.barChanged { setNeedsLayout() }
         scripts.run(outcome.scripts)
+    }
+
+    // MARK: skyland components
+
+    /// Asks skyland for what the workspaces and title components show, when there are
+    /// some; one query at a time, and one more when asked meanwhile.
+    private func askSkyland() {
+        let wantsWorkspaces = model.items.contains { $0.kind == "workspaces" }
+        let wantsTitle = model.items.contains { $0.kind == "title" }
+        guard wantsWorkspaces || wantsTitle else { return }
+        if skylandAsking {
+            skylandAskAgain = true
+            return
+        }
+        skylandAsking = true
+        let group = DispatchGroup()
+        var workspaces: String?, windows: String?, focused: String?
+        if wantsWorkspaces {
+            group.enter()
+            SkylandSocket.run(SkylandData.workspacesCommand) { workspaces = $0; group.leave() }
+            group.enter()
+            SkylandSocket.run(SkylandData.windowsCommand) { windows = $0; group.leave() }
+        }
+        if wantsTitle {
+            group.enter()
+            SkylandSocket.run(SkylandData.focusedCommand) { focused = $0; group.leave() }
+        }
+        group.notify(queue: .main) { [weak self] in
+            guard let self else { return }
+            self.skylandAsking = false
+            if let workspaces, let windows, self.model.setWorkspaces(SkylandData.workspaces(workspaces, windows: windows)) {
+                self.startFrames()
+            }
+            if wantsTitle { self.model.setFocusedWindow(focused.flatMap(SkylandData.focusedWindow)) }
+            self.setNeedsLayout()
+            if self.skylandAskAgain {
+                self.skylandAskAgain = false
+                self.askSkyland()
+            }
+        }
     }
 
     private func spaceChanged() {
@@ -371,6 +423,7 @@ final class BarApp {
             }
         }
         view.onClick = { [unowned self] name, button, modifier in
+            if button == "left", let workspace = self.model.workspace(of: name) { SkylandSocket.run(["workspace", workspace]) }
             if let item = self.model.item(named: name), item.kind == "alias", item.props.clickScript.isEmpty,
                !item.subscriptions.contains("mouse.clicked")
             {
@@ -381,6 +434,12 @@ final class BarApp {
         view.onScroll = { [unowned self] name, delta, modifier in
             let env = ["SCROLL_DELTA": String(Int(delta.rounded())), "MODIFIER": modifier]
             if let name { self.scripts.run(self.model.scripts(for: "mouse.scrolled", env: env, only: name)) }
+            // over workspaces: the next or previous one, at most every quarter second (trackpads send many)
+            let now = ProcessInfo.processInfo.systemUptime
+            if let name, self.model.scrollsWorkspaces(name), now - self.lastWorkspaceScroll > 0.25 {
+                self.lastWorkspaceScroll = now
+                SkylandSocket.run(["workspace", "--wrap-around", delta > 0 ? "prev" : "next"])
+            }
             self.scripts.run(self.model.scripts(for: "mouse.scrolled.global", env: env))
         }
         view.onSlide = { [unowned self] name, percentage, modifier, done in
@@ -436,7 +495,7 @@ final class BarApp {
             let width = Double(frame.width), height = Double(frame.height)
             let spaces = model.currentSpaces[window.display].map { [$0] } ?? []
             let shown = model.items.filter { item in
-                item.kind != "bracket" && item.props.drawing && itemPositions.contains(item.props.position)
+                item.kind != "bracket" && item.kind != "workspaces" && item.props.drawing && itemPositions.contains(item.props.position)
                     && item.props.isShown(onDisplay: window.display, activeDisplay: active)
                     && (item.kind == "space" || item.props.isShown(onSpaces: spaces))
             }

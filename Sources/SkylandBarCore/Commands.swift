@@ -73,10 +73,10 @@ public enum CommandParser {
             case "--bar":
                 return props(args, name).map { .bar($0) }
             case "--add":
-                if let error = need(2, "<item|event|bracket|graph|slider|alias|space> <name> ...") { return .failure(error) }
+                if let error = need(2, "<item|event|bracket|graph|slider|alias|space|workspaces|title> <name> ...") { return .failure(error) }
                 let kind = args[0], itemName = args[1], rest = Array(args.dropFirst(2))
                 switch kind {
-                    case "item", "alias", "space":
+                    case "item", "alias", "space", "workspaces", "title":
                         guard rest.count == 1 else { return .failure(CommandError("--add \(kind): expected <name> <position>")) }
                     case "graph", "slider":
                         guard rest.count == 2, Double(rest[1]) != nil else {

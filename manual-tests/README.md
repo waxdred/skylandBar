@@ -25,5 +25,6 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `09-displays.sh` | `display=active` (fenêtre focus), `display=2`, `hidden=current` (2 écrans) |
 | `10-texts-scripts.sh` | `scroll_texts`, `update_freq`, `when_shown`, `--reload`, `--exit` |
 | `11-mach-lua.sh` | le CLI sketchybar et SbarLua par Mach, `--service install` |
+| `12-workspaces.sh` | composants natifs : workspaces (états, clic, molette, animation) et titre |
 
 Note ce qui ne va pas (le numéro du script et la case) et envoie-le avec une capture.

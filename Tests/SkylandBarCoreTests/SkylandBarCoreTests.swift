@@ -414,3 +414,94 @@ final class MachTests: XCTestCase {
         XCTAssertEqual(model.item(named: "lua")?.props.machHelper, "git.felix.other")
     }
 }
+
+final class WorkspaceComponentTests: XCTestCase {
+    let workspacesJSON = """
+        [{"workspace":"1","workspace-is-focused":true,"workspace-is-visible":true,"monitor-appkit-nsscreen-screens-id":1},
+         {"workspace":"2","workspace-is-focused":false,"workspace-is-visible":true,"monitor-appkit-nsscreen-screens-id":2},
+         {"workspace":"3","workspace-is-focused":false,"workspace-is-visible":false,"monitor-appkit-nsscreen-screens-id":1}]
+        """
+    let windowsJSON = """
+        [{"workspace":"1","app-name":"Safari"},{"workspace":"1","app-name":"Safari"},{"workspace":"1","app-name":"Code"},
+         {"workspace":"2","app-name":"Music"}]
+        """
+
+    func testParse() {
+        let list = SkylandData.workspaces(workspacesJSON, windows: windowsJSON)
+        XCTAssertEqual(list, [
+            WorkspaceInfo(name: "1", display: 1, focused: true, visible: true, apps: ["Safari", "Safari", "Code"]),
+            WorkspaceInfo(name: "2", display: 2, focused: false, visible: true, apps: ["Music"]),
+            WorkspaceInfo(name: "3", display: 1, focused: false, visible: false, apps: []),
+        ])
+        XCTAssertEqual(SkylandData.focusedWindow("[{\"app-name\":\"Code\",\"app-bundle-id\":\"com.microsoft.VSCode\",\"window-title\":\"main.swift\"}]"),
+                       FocusedWindow(app: "Code", bundleId: "com.microsoft.VSCode", title: "main.swift"))
+        XCTAssertNil(SkylandData.focusedWindow("[]"))
+        XCTAssertEqual(SkylandData.workspaces("not json", windows: "[]"), [])
+    }
+
+    func testWorkspaceItems() {
+        let model = BarModel()
+        _ = send(model, ["--add", "item", "logo", "left", "--add", "workspaces", "ws", "left", "--add", "item", "after", "left",
+                         "--set", "ws", "label={apps}", "icon.color=0xff888888", "background.drawing=off",
+                         "focused.icon.color=0xffffffff", "focused.background.drawing=on", "empty.label=·", "empty.icon.color=0xff444444"])
+        XCTAssertEqual(model.items.map(\.name), ["logo", "ws", "after"]) // nothing from skyland yet
+        model.setWorkspaces(SkylandData.workspaces(workspacesJSON, windows: windowsJSON))
+        XCTAssertEqual(model.items.map(\.name), ["logo", "ws", "ws.1", "ws.2", "ws.3", "after"]) // right after the component
+        let one = model.item(named: "ws.1")!.props, three = model.item(named: "ws.3")!.props
+        XCTAssertEqual(one.icon.string, "1") // {name} when the icon is not set
+        XCTAssertEqual(one.label.string, "Safari Code") // {apps}: each app once
+        XCTAssertEqual(one.icon.color.value, 0xFFFF_FFFF) // focused
+        XCTAssertTrue(one.background.drawing)
+        XCTAssertEqual(one.display, "1")
+        XCTAssertEqual(model.item(named: "ws.2")?.props.display, "2") // on its monitor
+        XCTAssertEqual(three.label.string, "·") // empty
+        XCTAssertEqual(three.icon.color.value, 0xFF44_4444)
+        XCTAssertFalse(three.background.drawing)
+        XCTAssertEqual(model.workspace(of: "ws.3"), "3")
+        XCTAssertTrue(model.scrollsWorkspaces("ws.1"))
+        XCTAssertNil(model.workspace(of: "logo"))
+
+        // the focus moves: the items follow; the component's options and errors
+        _ = send(model, ["--set", "ws", "workspaces.monitor=off", "workspaces.scroll=off"])
+        model.setWorkspaces(SkylandData.workspaces(workspacesJSON.replacingOccurrences(of: "\"workspace-is-focused\":true", with: "\"workspace-is-focused\":false"),
+                                                   windows: windowsJSON))
+        XCTAssertEqual(model.item(named: "ws.1")?.props.icon.color.value, 0xFF88_8888)
+        XCTAssertEqual(model.item(named: "ws.2")?.props.display, "all")
+        XCTAssertFalse(model.scrollsWorkspaces("ws.1"))
+        XCTAssertFalse(send(model, ["--set", "ws", "workspaces.colour=1"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--set", "ws", "focused.nope=1"]).errors.isEmpty)
+        _ = send(model, ["--remove", "ws"])
+        XCTAssertEqual(model.items.map(\.name), ["logo", "after"]) // its items go with it
+    }
+
+    func testAnimatedFocus() {
+        let model = BarModel()
+        var now = 0.0
+        model.clock = { now }
+        _ = send(model, ["--add", "workspaces", "ws", "left", "--set", "ws", "workspaces.animation=tanh", "workspaces.animation_frames=30",
+                         "focused.y_offset=4"])
+        model.setWorkspaces(SkylandData.workspaces(workspacesJSON, windows: windowsJSON))
+        XCTAssertFalse(model.isAnimating) // the first time, nothing to animate from
+        let moved = workspacesJSON.replacingOccurrences(of: "\"workspace\":\"1\",\"workspace-is-focused\":true", with: "\"workspace\":\"1\",\"workspace-is-focused\":false")
+            .replacingOccurrences(of: "\"workspace\":\"3\",\"workspace-is-focused\":false", with: "\"workspace\":\"3\",\"workspace-is-focused\":true")
+        XCTAssertTrue(model.setWorkspaces(SkylandData.workspaces(moved, windows: windowsJSON)))
+        XCTAssertEqual(model.displayed(model.item(named: "ws.1")!).yOffset, 4) // on its way down
+        XCTAssertEqual(model.displayed(model.item(named: "ws.3")!).yOffset, 0) // on its way up
+        now = 0.25
+        XCTAssertEqual(model.displayed(model.item(named: "ws.3")!).yOffset, 4 * Curve.tanh.value(0.5), accuracy: 1e-9)
+    }
+
+    func testTitle() {
+        let model = BarModel()
+        _ = send(model, ["--add", "title", "t", "center", "--set", "t", "title.app_icon=on"])
+        XCTAssertEqual(model.item(named: "t")?.props.label.string, "Desktop")
+        model.setFocusedWindow(FocusedWindow(app: "Code", bundleId: "com.microsoft.VSCode", title: "main.swift"))
+        XCTAssertEqual(model.item(named: "t")?.props.label.string, "Code: main.swift")
+        XCTAssertEqual(model.item(named: "t")?.props.icon.background.image.string, "app.com.microsoft.VSCode")
+        _ = send(model, ["--set", "t", "title.format=title", "title.empty=—"])
+        XCTAssertEqual(model.item(named: "t")?.props.label.string, "main.swift")
+        model.setFocusedWindow(nil)
+        XCTAssertEqual(model.item(named: "t")?.props.label.string, "—")
+        XCTAssertFalse(model.item(named: "t")!.props.icon.background.drawing)
+    }
+}

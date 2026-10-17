@@ -2,7 +2,8 @@ import Foundation
 
 public struct BarItem: Equatable {
     public var name: String
-    /// item, bracket, graph, slider, alias, space
+    /// item, bracket, graph, slider, alias, space; workspaces and title (skyland's), and
+    /// workspace (an item of a workspaces component)
     public var kind: String
     public var props: ItemProps
     /// the events its script gets, in subscription order
@@ -11,6 +12,13 @@ public struct BarItem: Equatable {
     public var args: [String] = []
     /// a graph's values (0...1) given with --push, the newest last
     public var graphValues: [Double] = []
+    /// a component's options (`workspaces.animation=tanh`, `title.app_icon=on`), without the prefix
+    public var options: [String: String] = [:]
+    /// a workspaces component's `focused.*`, `visible.*`, `empty.*` properties, by state
+    public var states: [String: [Prop]] = [:]
+    /// a workspace item's component and workspace
+    public var parent = ""
+    public var workspace = ""
 }
 
 /// A script to run: the item's `script` (or `click_script`) with NAME, SENDER, INFO...;
@@ -35,6 +43,8 @@ public struct Outcome: Equatable {
     public var timersChanged = false
     /// an --animate started: draw frames until `BarModel.isAnimating` is false
     public var animating = false
+    /// a workspaces or title component was added: the app asks skyland for its data
+    public var componentsChanged = false
     /// custom events (their distributed notifications)
     public var eventsChanged = false
     public var reload = false
@@ -113,6 +123,10 @@ public final class BarModel {
     /// seconds, for animations; tests set their own
     public var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
 
+    /// skyland's workspaces and focused window, for the components (set by the app)
+    public private(set) var workspaces: [WorkspaceInfo] = []
+    public private(set) var focusedWindow: FocusedWindow?
+
     /// --animate of the message being run
     private var animation: (curve: Curve, frames: Double)?
     private var itemTransitions: [String: Transition<ItemProps>] = [:]
@@ -150,6 +164,10 @@ public final class BarModel {
         animation = nil
         for command in commands { execute(command, &outcome) }
         animation = nil
+        if outcome.redraw && items.contains(where: { $0.kind == "workspaces" || $0.kind == "workspace" || $0.kind == "title" }) {
+            if rebuildWorkspaces() { outcome.animating = true }
+            applyTitle()
+        }
         return outcome
     }
 
@@ -210,7 +228,7 @@ public final class BarModel {
                         }
                     }
                     for prop in props {
-                        if let error = items[index].props.apply(prop.key, prop.value) {
+                        if let error = setComponent(index, prop) ?? items[index].props.apply(prop.key, prop.value) {
                             o.errors.append("[!] Set \(items[index].name): \(prop.key)=\(prop.value): \(error)")
                         }
                         if ["update_freq", "updates", "script", "alias.update_freq"].contains(prop.key) { o.timersChanged = true }
@@ -231,6 +249,7 @@ public final class BarModel {
                     for name in names where !items[index].subscriptions.contains(name) { items[index].subscriptions.append(name) }
                 }
                 o.eventsChanged = true
+                if matches.contains(where: { items[$0].kind == "workspaces" }) { o.redraw = true } // its items get them too
             case .trigger(let event, let env):
                 var vars: [String: String] = [:]
                 for prop in env { vars[prop.key] = prop.value }
@@ -317,7 +336,7 @@ public final class BarModel {
         guard item(named: name) == nil else { return o.errors.append("[!] Add \(kind): '\(name)' already exists") }
         var props = defaults
         switch kind {
-            case "item", "alias", "space", "graph", "slider":
+            case "item", "alias", "space", "graph", "slider", "workspaces", "title":
                 let position = args[0]
                 guard itemPositions.contains(position) || position.hasPrefix("popup.") else {
                     return o.errors.append("[!] Add \(kind): '\(position)' is not one of \(itemPositions.joined(separator: ", ")) or popup.<item>")
@@ -331,6 +350,128 @@ public final class BarModel {
         items.append(BarItem(name: name, kind: kind, props: props, args: kind == "bracket" ? args : []))
         o.redraw = true
         if kind == "alias" { o.timersChanged = true }
+        if kind == "workspaces" || kind == "title" { o.componentsChanged = true }
+    }
+
+    // MARK: skyland components
+
+    /// A component's own keys: `workspaces.*` / `title.*` options, `focused.*`... states.
+    /// nil when `prop` is an ordinary property; else Optional(error), Optional(nil) when taken.
+    private func setComponent(_ index: Int, _ prop: Prop) -> String?? {
+        let kind = items[index].kind
+        let (head, rest) = splitKey(prop.key)
+        guard (kind == "workspaces" && (head == "workspaces" || workspaceStates.contains(head))) || (kind == "title" && head == "title"),
+              let rest else { return nil }
+        if head == kind {
+            let allowed = kind == "workspaces" ? ["monitor", "scroll", "animation", "animation_frames"] : ["app_icon", "format", "empty"]
+            guard allowed.contains(rest) else { return .some("unknown option (\(allowed.joined(separator: ", ")))") }
+            items[index].options[rest] = prop.value
+            return .some(nil)
+        }
+        var scratch = ItemProps() // the property must be one
+        if let error = scratch.apply(rest, prop.value) { return .some(error) }
+        var props = items[index].states[head] ?? []
+        props.removeAll { $0.key == rest }
+        props.append(Prop(rest, prop.value))
+        items[index].states[head] = props
+        return .some(nil)
+    }
+
+    /// New data from skyland: the workspace items follow. True when some animate.
+    @discardableResult
+    public func setWorkspaces(_ list: [WorkspaceInfo]) -> Bool {
+        guard list != workspaces else { return false }
+        workspaces = list
+        return rebuildWorkspaces()
+    }
+
+    /// The focused window changed: the title components follow.
+    public func setFocusedWindow(_ window: FocusedWindow?) {
+        focusedWindow = window
+        applyTitle()
+    }
+
+    /// The items of each workspaces component, right after it: its properties, then the
+    /// states' ({name} etc. filled). Items whose look changed animate with
+    /// `workspaces.animation` (a curve) over `workspaces.animation_frames` (15). True when
+    /// some animate.
+    @discardableResult
+    func rebuildWorkspaces() -> Bool {
+        var before: [String: ItemProps] = [:]
+        for item in items where item.kind == "workspace" { before[item.name] = displayed(item) }
+        items.removeAll { $0.kind == "workspace" }
+        var animated = false
+        var index = 0
+        while index < items.count {
+            let component = items[index]
+            index += 1
+            guard component.kind == "workspaces" else { continue }
+            let curve = component.options["animation"].flatMap(Curve.init(rawValue:))
+            let frames = component.options["animation_frames"].flatMap(Double.init) ?? 15
+            let children = workspaces.map { workspaceItem(component, $0) }
+            for child in children {
+                if let curve, let old = before[child.name], old != child.props {
+                    itemTransitions[child.name] = transition(from: old, (curve, frames))
+                    animated = true
+                }
+            }
+            items.insert(contentsOf: children, at: index)
+            index += children.count
+        }
+        let names = Set(items.map(\.name))
+        itemTransitions = itemTransitions.filter { names.contains($0.key) }
+        return animated
+    }
+
+    private func workspaceItem(_ component: BarItem, _ workspace: WorkspaceInfo) -> BarItem {
+        var props = component.props
+        if props.icon.string.isEmpty { props.icon.string = "{name}" }
+        if component.options["monitor"] != "off" { props.display = String(workspace.display) }
+        for state in workspaceStates where workspace.isIn(state) {
+            for prop in component.states[state] ?? [] { _ = props.apply(prop.key, prop.value) }
+        }
+        props.icon.string = workspace.fill(props.icon.string)
+        props.label.string = workspace.fill(props.label.string)
+        var item = BarItem(name: "\(component.name).\(workspace.name)", kind: "workspace", props: props,
+                           subscriptions: component.subscriptions)
+        item.parent = component.name
+        item.workspace = workspace.name
+        return item
+    }
+
+    /// Each title component's label: `title.format` app_title ("App: title"), title or app;
+    /// `title.empty` ("Desktop") without a window; with `title.app_icon=on`, the app's icon
+    /// as its icon's background image.
+    private func applyTitle() {
+        for index in items.indices where items[index].kind == "title" {
+            let options = items[index].options
+            var label = options["empty"] ?? "Desktop"
+            if let window = focusedWindow {
+                switch options["format"] ?? "app_title" {
+                    case "title": label = window.title.isEmpty ? window.app : window.title
+                    case "app": label = window.app
+                    default: label = window.title.isEmpty ? window.app : "\(window.app): \(window.title)"
+                }
+            }
+            items[index].props.label.string = label
+            if options["app_icon"] == "on" {
+                let bundle = focusedWindow?.bundleId ?? ""
+                items[index].props.icon.background.image.string = bundle.isEmpty ? "" : "app.\(bundle)"
+                items[index].props.icon.background.drawing = !bundle.isEmpty
+            }
+        }
+    }
+
+    /// The workspace a workspace item stands for.
+    public func workspace(of name: String) -> String? {
+        guard let item = item(named: name), item.kind == "workspace" else { return nil }
+        return item.workspace
+    }
+
+    /// Whether scrolling over this item cycles the workspaces (`workspaces.scroll`, on).
+    public func scrollsWorkspaces(_ name: String) -> Bool {
+        guard let item = item(named: name), item.kind == "workspace" else { return false }
+        return self.item(named: item.parent)?.options["scroll"] != "off"
     }
 
     // MARK: popups, brackets, sliders, spaces
@@ -457,6 +598,9 @@ public final class BarModel {
             ] as [String: Any],
             "bounding_rects": rects,
         ]
+        if !item.options.isEmpty { json["options"] = item.options }
+        if !item.states.isEmpty { json["states"] = item.states.mapValues { $0.map { "\($0.key)=\($0.value)" } } }
+        if item.kind == "workspace" { json["workspace"] = item.workspace }
         switch item.kind {
             case "bracket": json["bracket"] = members(of: item)
             case "graph": json["graph"] = item.props.graph.json.merging(["values": item.graphValues]) { a, _ in a }

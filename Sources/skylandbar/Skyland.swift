@@ -1,50 +1,54 @@
 import AppKit
 import SkylandBarCore
 
-/// skyland's (or AeroSpace's) events, through its `subscribe` on its socket: workspace,
-/// focus, monitor and mode changes reach the bar as they happen, with no
-/// `exec-on-workspace-change` script. The connection comes back when skyland restarts.
-///
-/// The socket speaks AeroSpace's protocol: a UInt32 version each way, then
-/// length-prefixed JSON (UInt32 length, native byte order): our request, then its events.
-final class SkylandEvents {
-    /// (event, env with INFO)
-    var onEvent: ((String, [String: String]) -> Void)?
+/// skyland's (or AeroSpace's) socket: AeroSpace's protocol, a UInt32 version each way,
+/// then length-prefixed JSON (UInt32 length, native byte order) both ways.
+enum SkylandSocket {
     private static let version: UInt32 = 1
-    private static var sockets: [String] {
+    static var paths: [String] {
         ["/tmp/com.waxdred.skyland-\(NSUserName()).sock", "/tmp/bobko.aerospace-\(NSUserName()).sock"]
     }
 
-    func start() {
-        let thread = Thread { [weak self] in
-            while self != nil {
-                for path in Self.sockets where FileManager.default.fileExists(atPath: path) {
-                    self?.listen(path)
-                }
-                Thread.sleep(forTimeInterval: 3) // not running, or gone: try again
-            }
+    /// A connection past the version check, to the first window manager that answers.
+    static func open() -> Int32? {
+        for path in paths where FileManager.default.fileExists(atPath: path) {
+            guard let fd = connect(path) else { continue }
+            var mine = version
+            if Socket.writeAll(fd, Data(bytes: &mine, count: 4)), readUInt32(fd) == version { return fd }
+            close(fd)
         }
-        thread.name = "skylandbar skyland events"
-        thread.start()
+        return nil
     }
 
-    /// Reads events until the connection ends.
-    private func listen(_ path: String) {
-        guard let fd = Self.connect(path) else { return }
-        defer { close(fd) }
-        var version = Self.version
-        guard Socket.writeAll(fd, Data(bytes: &version, count: 4)), let theirs = Self.readUInt32(fd), theirs == Self.version else { return }
-        let request: [String: Any] = ["args": ["subscribe", "--all"], "stdin": "", "windowId": NSNull(), "workspace": NSNull()]
-        guard let json = try? JSONSerialization.data(withJSONObject: request) else { return }
+    /// Sends a command (its arguments, as on the aerospace CLI).
+    static func send(_ fd: Int32, _ args: [String]) -> Bool {
+        let request: [String: Any] = ["args": args, "stdin": "", "windowId": NSNull(), "workspace": NSNull()]
+        guard let json = try? JSONSerialization.data(withJSONObject: request) else { return false }
         var length = UInt32(json.count)
-        guard Socket.writeAll(fd, Data(bytes: &length, count: 4) + json) else { return }
-        while let size = Self.readUInt32(fd), size < 1 << 20, let message = Self.read(fd, Int(size)) {
-            guard let event = (try? JSONSerialization.jsonObject(with: message)) as? [String: Any] else { continue }
-            let info = String(decoding: message, as: UTF8.self)
-            let events = skylandEvent(event)
-            DispatchQueue.main.async { [weak self] in
-                for (name, env) in events { self?.onEvent?(name, env.merging(["INFO": info]) { a, _ in a }) }
+        return Socket.writeAll(fd, Data(bytes: &length, count: 4) + json)
+    }
+
+    /// The next length-prefixed message.
+    static func receive(_ fd: Int32) -> Data? {
+        guard let size = readUInt32(fd), size < 1 << 24 else { return nil }
+        return read(fd, Int(size))
+    }
+
+    /// Runs a command on a connection of its own, off the main thread; `done` gets its
+    /// output on the main thread, nil when it failed or nothing answers.
+    static func run(_ args: [String], done: ((String?) -> Void)? = nil) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            var output: String? = nil
+            if let fd = open() {
+                if send(fd, args), let answer = receive(fd),
+                   let object = (try? JSONSerialization.jsonObject(with: answer)) as? [String: Any],
+                   (object["exitCode"] as? NSNumber)?.int32Value == 0
+                {
+                    output = object["stdout"] as? String ?? ""
+                }
+                close(fd)
             }
+            if let done { DispatchQueue.main.async { done(output) } }
         }
     }
 
@@ -79,6 +83,43 @@ final class SkylandEvents {
 
     private static func readUInt32(_ fd: Int32) -> UInt32? {
         read(fd, 4).map { $0.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) } }
+    }
+}
+
+/// skyland's events, through its `subscribe`: workspace, focus, monitor and mode changes
+/// reach the bar as they happen, with no `exec-on-workspace-change` script. The connection
+/// comes back when skyland restarts.
+final class SkylandEvents {
+    /// (event, env with INFO)
+    var onEvent: ((String, [String: String]) -> Void)?
+    /// a connection was made: what was missed meanwhile can be asked for
+    var onConnect: (() -> Void)?
+
+    func start() {
+        let thread = Thread { [weak self] in
+            while self != nil {
+                self?.listen()
+                Thread.sleep(forTimeInterval: 3) // not running, or gone: try again
+            }
+        }
+        thread.name = "skylandbar skyland events"
+        thread.start()
+    }
+
+    /// Reads events until the connection ends.
+    private func listen() {
+        guard let fd = SkylandSocket.open() else { return }
+        defer { close(fd) }
+        guard SkylandSocket.send(fd, ["subscribe", "--all"]) else { return }
+        DispatchQueue.main.async { [weak self] in self?.onConnect?() }
+        while let message = SkylandSocket.receive(fd) {
+            guard let event = (try? JSONSerialization.jsonObject(with: message)) as? [String: Any] else { continue }
+            let info = String(decoding: message, as: UTF8.self)
+            let events = skylandEvent(event)
+            DispatchQueue.main.async { [weak self] in
+                for (name, env) in events { self?.onEvent?(name, env.merging(["INFO": info]) { a, _ in a }) }
+            }
+        }
     }
 }
 

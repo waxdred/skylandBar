@@ -62,6 +62,37 @@ skylandbar --query bar
   triggers it (`exec-on-workspace-change`), remove that line.
 - skyland pushes its workspaces and window title to skylandbar while it runs, and to
   sketchybar otherwise.
+- **Built-in workspaces and window title, no scripts**: skylandbar asks skyland (or AeroSpace)
+  itself, on each of its events:
+
+  ```sh
+  skylandbar --add workspaces ws left \
+             --set ws icon.font="SF Pro:Bold:13" icon.color=0xff6c7086 label="{apps}" label.font.size=11 \
+                      background.color=0xff313244 background.corner_radius=6 background.height=22 \
+                      icon.padding_left=8 label.padding_right=8 \
+                      focused.icon.color=0xffcba6f7 focused.background.color=0xff45475a \
+                      empty.label="" visible.background.border_width=1 visible.background.border_color=0xff585b70 \
+                      workspaces.animation=tanh workspaces.animation_frames=12 \
+             --add title title center --set title title.app_icon=on label.max_chars=50
+  ```
+
+  `--add workspaces <name> <position>` puts an item per workspace right after it, named
+  `<name>.<workspace>`. Each item gets the component's properties, then those of its states:
+  `empty.*` (no window), `visible.*` (shown on a display), `focused.*`, with the later ones
+  winning. `{name}`, `{apps}` (each app once) and `{count}` (windows) are filled in the icon
+  and the label; an icon left empty shows `{name}`. Each item sits on its workspace's display
+  (`workspaces.monitor=off`: on every bar). A click goes to that workspace, and scrolling over the
+  items goes to the next or previous one (`workspaces.scroll=off` turns this off). With
+  `workspaces.animation=<curve>` (and `workspaces.animation_frames`, 15), the items move to
+  their new look. The items also take the component's script and subscriptions, with `NAME`
+  set to the item.
+
+  `--add title <name> <position>` shows the focused window: `title.format` is `app_title`
+  ("App: title"), `title` or `app`; `title.empty` (Desktop) is shown when no window has the
+  focus; `title.app_icon=on` draws the app's icon as the icon's background image.
+
+  Pick a component name your config does not already use for items (skyland's own profile
+  has `workspace.N` items).
 
 - **Liquid Glass**: `--bar glass=on` (or `clear`), and `background.glass=on` on any background
   (items, icons, labels, brackets, `popup.background`, `slider.background`). The color becomes
