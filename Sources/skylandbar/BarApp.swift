@@ -22,6 +22,7 @@ final class BarApp {
     private var layoutPending = false
     private var hotload: DispatchSourceFileSystemObject?
     private var hotloadOn = false
+    private var settingsWindow: SettingsWindow?
     private var signalSources: [DispatchSourceSignal] = []
     /// the windows (bar and popups) the mouse is in, for mouse.entered/exited.global
     private var mouseIn = Set<ObjectIdentifier>()
@@ -148,6 +149,7 @@ final class BarApp {
         if outcome.exit { return quit() }
         if outcome.reload { return reload(outcome.reloadPath) }
         if let on = outcome.hotload { setHotload(on) }
+        if outcome.settings { openSettings() }
         if outcome.barChanged {
             updateMotion()
             configureWindows()
@@ -386,6 +388,38 @@ final class BarApp {
         updateTimers()
         configureWindows()
         if let path, FileManager.default.fileExists(atPath: path) { run(path) } else { runConfig() }
+    }
+
+    /// --settings: the bar's settings window (Settings.swift); saved, the bar loads its config
+    /// again (hotload does when it is on). Again on a shown window: it closes.
+    private func openSettings() {
+        guard let file = configFile else {
+            return FileHandle.standardError.write(Data("skylandbar: --settings: no config file\n".utf8))
+        }
+        MainActor.assumeIsolated { showSettings(file) } // commands are handled on the main thread
+    }
+
+    @MainActor
+    private func showSettings(_ file: String) {
+        if settingsWindow == nil {
+            var environment = scripts.environment
+            environment["CONFIG_DIR"] = (file as NSString).deletingLastPathComponent
+            let model = SettingsModel(file: file, current: { [unowned self] in
+                let bar = self.model.bar.json.mapValues { "\($0)" }
+                return (bar, self.model.notch?.name, self.model.notch?.options ?? [:])
+            }, check: { text in
+                guard file.hasSuffix(".toml") else { return nil }
+                if case .failure(let error) = ConfigFile.plan(text, environment: environment, read: { try? String(contentsOfFile: $0, encoding: .utf8) }) {
+                    return error.message
+                }
+                return nil
+            }, reloaded: { [weak self] in
+                guard let self, !self.hotloadOn else { return }
+                self.reload(nil)
+            })
+            settingsWindow = SettingsWindow(model: model)
+        }
+        settingsWindow?.toggle()
     }
 
     /// --hotload on: the config runs again when its file changes.
@@ -837,7 +871,9 @@ final class BarApp {
         let props = children.map { model.displayed($0) }
         let middles = zip(children, props).map { middle($0, $1) }
         let lengths = zip(props, middles).map { Layout.length(of: $0, middle: $1, measure: Fonts.width, image: Images.width) }
-        let slots = children.indices.map { index in
+        // notch.bottom_right: that item in the open notch's bottom right corner, out of the rows
+        let corner = children.firstIndex { $0.name == notch.options["bottom_right"] }
+        let slots = children.indices.filter { $0 != corner }.map { index in
             Layout.Slot(name: children[index].name, position: "popup", length: lengths[index],
                         paddingLeft: props[index].background.paddingLeft, paddingRight: props[index].background.paddingRight,
                         fixed: props[index].width != nil)
@@ -882,6 +918,11 @@ final class BarApp {
                 items.append(placed(children[index], props[index], x: left + place.x, length: lengths[index], top: top + place.y, height: row,
                                     middle: middles[index]))
                 frames[children[index].name, default: [:]]["notch"] = Box(x: left + place.x, y: top + place.y, width: lengths[index], height: row)
+            }
+            if let corner {
+                let x = width - style.flare - padding - lengths[corner], y = height - padding / 2 - row
+                items.append(placed(children[corner], props[corner], x: x, length: lengths[corner], top: y, height: row, middle: middles[corner]))
+                frames[children[corner].name, default: [:]]["notch"] = Box(x: x, y: y, width: lengths[corner], height: row)
             }
         }
         window.view.show(items, style: style)

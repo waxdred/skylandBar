@@ -68,7 +68,14 @@ An inline table `{ ... }` stays on one line. `examples/skylandbar.toml` is a ful
 ```sh
 skylandbar --export > ~/.config/skylandbar/skylandbar.toml   # the running bar (a script config) as TOML
 skylandbar --check                                           # check the file without touching the bar
+skylandbar --settings                                        # the settings window
 ```
+
+`--settings` opens the bar's settings window, in skyland's style: the bar, its glass and the
+notch as sliders and pickers, with the running bar's values. Save (⌘S) checks the config and
+writes each changed value on its own line of the file (comments kept: the bar's in `[bar]`, the
+notch's in its `notch = { ... }`), then the bar loads it again; "Open config file" gives the whole
+file to its editor. The liquid-glass example puts a gear for it in the notch.
 
 `--export` writes what each item has that differs from the defaults, with the scripts as they are
 and the labels as they are now.
@@ -241,7 +248,8 @@ What makes this possible, for any config:
   height), `notch.corner_radius` (24, the bottom corners), `notch.flare` (19, the top curves
   into the screen's edge) and `notch.color` (black). Closed: `notch.closed_width` /
   `notch.closed_height` (the camera's notch), `notch.closed_corner_radius` (14),
-  `notch.closed_flare` (6). `notch.open=on|off|toggle`
+  `notch.closed_flare` (6). `notch.bottom_right = "<item>"`: that item of the notch sits in its
+  bottom right corner, out of the rows (the example's settings gear). `notch.open=on|off|toggle`
   opens or closes it from a script (on media_change, for example), and items can subscribe to
   `notch_open` / `notch_close`. Without a notch nothing shows, unless `notch.fake=on`, which puts
   one at the top middle of the main display. `notch.glass=on` (or `clear`): the same shape on the same

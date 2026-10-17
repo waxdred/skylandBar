@@ -54,6 +54,7 @@ public struct Outcome: Equatable {
     public var reload = false
     public var reloadPath: String? = nil
     public var hotload: Bool? = nil
+    public var settings = false
     public var exit = false
 }
 
@@ -365,6 +366,8 @@ public final class BarModel {
                 o.reloadPath = path
             case .hotload(let on):
                 o.hotload = on
+            case .settings:
+                o.settings = true
             case .exit:
                 o.exit = true
         }
@@ -460,6 +463,8 @@ public final class BarModel {
                 guard value == "spring" || Curve(rawValue: value) != nil else {
                     return "'\(value)' is not spring or one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))"
                 }
+            case "bottom_right": // an item's name (position=popup.<notch>)
+                break
             case "glass":
                 var glass = "off"
                 if let error = Value.setGlass(&glass, value) { return error }
@@ -472,7 +477,7 @@ public final class BarModel {
                 items[index].options["open"] = open ? "on" : "off"
                 return nil
             default:
-                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare)"
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare, bottom_right)"
         }
         items[index].options[option] = value
         return nil

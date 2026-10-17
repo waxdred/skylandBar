@@ -20,7 +20,7 @@ let usage = """
              --reorder <name>...              --rename <name> <new>   --clone <name> <parent>
              --push <graph> <value>...        --animate linear|quadratic|tanh|sin|exp|circ <frames>
              --query bar|defaults|events|displays|default_menu_items|<name>
-             --update   --reload [<file>]   --hotload on|off   --exit
+             --update   --reload [<file>]   --hotload on|off   --settings   --exit
     Its config: ~/.config/skylandbar/skylandbar.toml, else ~/.config/skylandbar/skylandbarrc (a
     script of skylandbar commands). Tools that use SketchyBar's names reach it too (README,
     Compatibility).

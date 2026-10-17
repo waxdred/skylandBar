@@ -895,6 +895,37 @@ final class LiquidGlassTests: XCTestCase {
         XCTAssertFalse(send(model, ["--set", "island", "notch.animation=bounce"]).errors.isEmpty)
     }
 
+    /// the settings window's edits: one value in place, comments and the rest kept
+    func testTOMLLines() {
+        let text = """
+            include = "themes/x.toml"   # a theme
+
+            [bar]
+            height = 32   # points
+
+            [[item]]
+            name = "clock"
+
+            [[item]]
+            type = "notch"
+            name = "island"
+            notch = { glass = "regular", color = "${tint}", width = 600, note = "a, b" }   # the island
+            """
+        XCTAssertEqual(TOMLLines.value(text, section: "bar", key: "height"), "32")
+        var changed = TOMLLines.set(text, section: "bar", key: "height", value: "40")
+        XCTAssertTrue(changed.contains("height = 40   # points"))
+        changed = TOMLLines.set(changed, section: "bar", key: "margin", value: "8")
+        XCTAssertTrue(changed.contains("height = 40   # points\nmargin = 8"))
+        let fresh = TOMLLines.set("a = 1\n", section: "bar", key: "glass_blur", value: "4")
+        XCTAssertTrue(fresh.contains("[bar]\nglass_blur = 4"))
+
+        let inline = TOMLLines.setInline(text, item: "island", table: "notch", field: "width", value: "640")!
+        XCTAssertEqual(inline.split(separator: "\n").last.map(String.init), #"notch = { glass = "regular", color = "${tint}", width = 640, note = "a, b" }   # the island"#)
+        let added = TOMLLines.setInline(text, item: "island", table: "notch", field: "flare", value: "19")!
+        XCTAssertEqual(added.split(separator: "\n").last.map(String.init), #"notch = { glass = "regular", color = "${tint}", width = 600, note = "a, b", flare = 19 }   # the island"#)
+        XCTAssertNil(TOMLLines.setInline(text, item: "clock", table: "notch", field: "width", value: "1"))
+    }
+
     func testShippedConfigs() throws {
         let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let read = { (path: String) in try? String(contentsOfFile: path, encoding: .utf8) }

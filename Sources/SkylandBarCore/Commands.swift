@@ -32,6 +32,8 @@ public enum Command: Equatable {
     case update
     case reload(path: String?)
     case hotload(Bool)
+    /// the settings window: the config file in an editor
+    case settings
     case exit
 }
 
@@ -142,6 +144,8 @@ public enum CommandParser {
                     return .failure(CommandError("--hotload: expected on or off"))
                 }
                 return .success(.hotload(on))
+            case "--settings":
+                return .success(.settings)
             case "--exit":
                 return .success(.exit)
             default:

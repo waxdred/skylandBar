@@ -111,7 +111,7 @@ background = { glass = "regular", color = "${glass_tint}", height = 36, corner_r
 [[item]]
 type = "notch"
 name = "island"
-notch = { glass = "regular", color = "${glass_tint}", width = 600, height = 190, padding = 16 }   # boringNotch's shape and springs, of glass (without glass: black)
+notch = { glass = "regular", color = "${glass_tint}", width = 600, height = 190, padding = 16, bottom_right = "island.settings" }   # boringNotch's shape and springs, of glass (without glass: black)
 
 [[item]]
 name = "island.date"
@@ -132,3 +132,11 @@ script = '''
 [ "$SENDER" = media_change ] && skylandbar --set "$NAME" label="$(echo "$INFO" | jq -r '.artist + " — " + .title')"
 '''
 subscribe = "media_change"
+
+[[item]]
+name = "island.settings"            # the notch's bottom right corner (notch.bottom_right)
+position = "popup.island"
+icon = { string = "􀍟", font = "${font}:Semibold:15", color = "${secondary}", padding_left = 6, padding_right = 6 }
+label = { drawing = false }
+click_script = "skylandbar --settings"   # this file in an editor, with Save
+hover = { icon.color = "${primary}" }
