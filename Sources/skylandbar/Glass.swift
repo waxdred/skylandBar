@@ -4,6 +4,16 @@ import SkylandBarCore
 /// Liquid Glass (`glass=on|clear` on the bar, popups and backgrounds): NSGlassEffectView on
 /// macOS 26 built with Xcode 26, a blurred NSVisualEffectView before.
 enum Glass {
+    /// Which glass this bar draws, and why: said at start
+    static var engine: String {
+        #if compiler(>=6.2)
+            if #available(macOS 26.0, *) { return "Liquid Glass (NSGlassEffectView)" }
+            return "blur (NSVisualEffectView): Liquid Glass needs macOS 26, this is macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        #else
+            return "blur (NSVisualEffectView): Liquid Glass needs a build with Xcode 26 (sudo xcode-select -s /Applications/Xcode.app)"
+        #endif
+    }
+
     static func makeView() -> NSView {
         #if compiler(>=6.2)
             if #available(macOS 26.0, *) { return NSGlassEffectView() }

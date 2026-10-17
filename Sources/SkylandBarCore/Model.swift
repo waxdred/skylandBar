@@ -414,6 +414,17 @@ public final class BarModel {
             items[index].states["hover"] = props
             return .some(nil)
         }
+        if kind == "workspaces", head == "workspace", let rest { // one workspace's own look: workspace.<name>.icon=...
+            let (name, key) = splitKey(rest)
+            guard let key else { return .some("expected workspace.<name>.<property>") }
+            var scratch = ItemProps()
+            if let error = scratch.apply(key, prop.value) { return .some(error) }
+            var props = items[index].states["workspace.\(name)"] ?? []
+            props.removeAll { $0.key == key }
+            props.append(Prop(key, prop.value))
+            items[index].states["workspace.\(name)"] = props
+            return .some(nil)
+        }
         guard (kind == "workspaces" && (head == "workspaces" || workspaceStates.contains(head))) || (kind == "title" && head == "title")
             || (kind == "notch" && head == "notch"),
               let rest else { return nil }
@@ -520,6 +531,7 @@ public final class BarModel {
         var props = component.props
         if props.icon.string.isEmpty { props.icon.string = "{name}" }
         if component.options["monitor"] != "off" { props.display = String(workspace.display) }
+        for prop in component.states["workspace.\(workspace.name)"] ?? [] { _ = props.apply(prop.key, prop.value) }
         for state in workspaceStates where workspace.isIn(state) {
             for prop in component.states[state] ?? [] { _ = props.apply(prop.key, prop.value) }
         }

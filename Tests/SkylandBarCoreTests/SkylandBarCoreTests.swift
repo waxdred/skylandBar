@@ -473,6 +473,14 @@ final class WorkspaceComponentTests: XCTestCase {
         XCTAssertTrue(model.scrollsWorkspaces("ws.1"))
         XCTAssertNil(model.workspace(of: "logo"))
 
+        // one workspace's own look, under the states: its icon
+        _ = send(model, ["--set", "ws", "workspace.1.icon=W", "workspace.3.icon=Z"])
+        XCTAssertEqual(model.item(named: "ws.1")?.props.icon.string, "W")
+        XCTAssertEqual(model.item(named: "ws.1")?.props.icon.color.value, 0xFFFF_FFFF) // focused still
+        XCTAssertEqual(model.item(named: "ws.3")?.props.icon.string, "Z")
+        XCTAssertEqual(model.item(named: "ws.2")?.props.icon.string, "2")
+        XCTAssertFalse(send(model, ["--set", "ws", "workspace.1.nope=1"]).errors.isEmpty)
+
         // the focus moves: the items follow; the component's options and errors
         _ = send(model, ["--set", "ws", "workspaces.monitor=off", "workspaces.scroll=off"])
         model.setWorkspaces(SkylandData.workspaces(workspacesJSON.replacingOccurrences(of: "\"workspace-is-focused\":true", with: "\"workspace-is-focused\":false"),

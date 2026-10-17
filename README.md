@@ -181,7 +181,8 @@ What makes this possible, for any config:
   `--add workspaces <name> <position>` puts an item per workspace right after it, named
   `<name>.<workspace>`. Each item gets the component's properties, then those of its states:
   `empty.*` (no window), `visible.*` (shown on a display), `focused.*`, with the later ones
-  winning. `{name}`, `{apps}` (each app once) and `{count}` (windows) are filled in the icon
+  winning. `workspace.<name>.*` gives one workspace its own look, under the states
+  (`workspace.1.icon=󰇧`). `{name}`, `{apps}` (each app once) and `{count}` (windows) are filled in the icon
   and the label; an icon left empty shows `{name}`. Each item sits on its workspace's display
   (`workspaces.monitor=off`: on every bar). A click goes to that workspace, and scrolling over the
   items goes to the next or previous one (`workspaces.scroll=off` turns this off). With

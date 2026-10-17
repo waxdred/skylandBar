@@ -58,6 +58,7 @@ final class BarApp {
         }
         mach = MachServer { [unowned self] arguments in self.handle(arguments) }
         mach.start()
+        FileHandle.standardError.write(Data("skylandbar: glass: \(Glass.engine)\n".utf8))
         // SbarLua finds the bar by BAR_NAME: the sketchybar name when we hold it
         scripts.barName = mach.names.first { $0 == "sketchybar" } ?? "skylandbar"
         events.onEvent = { [unowned self] event, info in
