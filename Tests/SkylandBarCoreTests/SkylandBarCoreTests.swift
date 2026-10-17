@@ -1,7 +1,7 @@
 @testable import SkylandBarCore
 import XCTest
 
-private func run(_ model: BarModel, _ arguments: [String], file: StaticString = #filePath, line: UInt = #line) -> Outcome {
+private func send(_ model: BarModel, _ arguments: [String], file: StaticString = #filePath, line: UInt = #line) -> Outcome {
     switch CommandParser.parse(arguments) {
         case .success(let commands): return model.execute(commands)
         case .failure(let error):
@@ -137,53 +137,53 @@ final class LayoutTests: XCTestCase {
 final class ModelTests: XCTestCase {
     func testItems() {
         let model = BarModel()
-        _ = run(model, ["--default", "icon.color=0xff00ff00", "--add", "item", "a", "left", "--add", "item", "b", "left",
+        _ = send(model, ["--default", "icon.color=0xff00ff00", "--add", "item", "a", "left", "--add", "item", "b", "left",
                         "--add", "item", "c", "right"])
         XCTAssertEqual(model.items.map(\.name), ["a", "b", "c"])
         XCTAssertEqual(model.item(named: "a")?.props.icon.color.value, 0xFF00_FF00) // defaults apply to new items
-        XCTAssertFalse(run(model, ["--add", "item", "a", "left"]).errors.isEmpty) // already there
+        XCTAssertFalse(send(model, ["--add", "item", "a", "left"]).errors.isEmpty) // already there
 
-        _ = run(model, ["--set", "/[ab]/", "label=x"])
+        _ = send(model, ["--set", "/[ab]/", "label=x"])
         XCTAssertEqual(model.items.map(\.props.label.string), ["x", "x", ""])
 
-        _ = run(model, ["--move", "a", "after", "b"])
+        _ = send(model, ["--move", "a", "after", "b"])
         XCTAssertEqual(model.items.map(\.name), ["b", "a", "c"])
-        _ = run(model, ["--reorder", "c", "b"])
+        _ = send(model, ["--reorder", "c", "b"])
         XCTAssertEqual(model.items.map(\.name), ["c", "a", "b"])
-        _ = run(model, ["--rename", "c", "clock", "--clone", "clock2", "clock"])
+        _ = send(model, ["--rename", "c", "clock", "--clone", "clock2", "clock"])
         XCTAssertEqual(model.items.map(\.name), ["clock", "clock2", "a", "b"])
-        _ = run(model, ["--remove", "/clock/"])
+        _ = send(model, ["--remove", "/clock/"])
         XCTAssertEqual(model.items.map(\.name), ["a", "b"])
-        XCTAssertFalse(run(model, ["--set", "nothing", "label=x"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--set", "nothing", "label=x"]).errors.isEmpty)
     }
 
     func testScripts() {
         let model = BarModel()
-        _ = run(model, ["--add", "event", "skyland_update",
+        _ = send(model, ["--add", "event", "skyland_update",
                         "--add", "item", "ws", "left", "--set", "ws", "script=echo ws", "--subscribe", "ws", "skyland_update",
                         "--add", "item", "clock", "right", "--set", "clock", "script=date", "update_freq=10", "click_script=open -a Calendar",
                         "--add", "item", "quiet", "right", "--set", "quiet", "script=true", "updates=off"])
-        let triggered = run(model, ["--trigger", "skyland_update", "FOCUSED=3"]).scripts
+        let triggered = send(model, ["--trigger", "skyland_update", "FOCUSED=3"]).scripts
         XCTAssertEqual(triggered, [ScriptRun(item: "ws", script: "echo ws", env: ["FOCUSED": "3", "NAME": "ws", "SENDER": "skyland_update", "INFO": ""])])
-        XCTAssertEqual(run(model, ["--update"]).scripts.map(\.item), ["ws", "clock"]) // forced: all but updates=off
+        XCTAssertEqual(send(model, ["--update"]).scripts.map(\.item), ["ws", "clock"]) // forced: all but updates=off
         XCTAssertEqual(model.scripts(for: "routine", only: "clock").map(\.script), ["date"])
         let clicks = model.click("clock", button: "left", modifier: "none")
         XCTAssertEqual(clicks.map(\.script), ["open -a Calendar"])
         XCTAssertEqual(clicks.first?.env["BUTTON"], "left")
-        XCTAssertFalse(run(model, ["--subscribe", "ws", "no_such_event"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--subscribe", "ws", "no_such_event"]).errors.isEmpty)
     }
 
     func testQuery() throws {
         let model = BarModel()
-        _ = run(model, ["--bar", "height=30", "--add", "item", "clock", "right", "--set", "clock", "label=12:00"])
+        _ = send(model, ["--bar", "height=30", "--add", "item", "clock", "right", "--set", "clock", "label=12:00"])
         model.frames = ["clock": ["display-1": Box(x: 900, y: 0, width: 60, height: 30)]]
-        let bar = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(run(model, ["--query", "bar"]).output.utf8)) as? [String: Any])
+        let bar = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(send(model, ["--query", "bar"]).output.utf8)) as? [String: Any])
         XCTAssertEqual(bar["height"] as? Double, 30)
         XCTAssertEqual(bar["items"] as? [String], ["clock"])
-        let item = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(run(model, ["--query", "clock"]).output.utf8)) as? [String: Any])
+        let item = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(send(model, ["--query", "clock"]).output.utf8)) as? [String: Any])
         XCTAssertEqual((item["label"] as? [String: Any])?["value"] as? String, "12:00")
         XCTAssertNotNil((item["bounding_rects"] as? [String: Any])?["display-1"])
-        XCTAssertFalse(run(model, ["--query", "nothing"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--query", "nothing"]).errors.isEmpty)
     }
 }
 
@@ -206,7 +206,7 @@ final class ComponentTests: XCTestCase {
 
     func testPopupsAndBrackets() {
         let model = BarModel()
-        _ = run(model, ["--add", "item", "apple", "left", "--set", "apple", "popup.drawing=toggle", "popup.align=center", "popup.background.color=0xff000000",
+        _ = send(model, ["--add", "item", "apple", "left", "--set", "apple", "popup.drawing=toggle", "popup.align=center", "popup.background.color=0xff000000",
                         "--add", "item", "apple.prefs", "popup.apple", "--add", "item", "apple.lock", "popup.apple",
                         "--add", "item", "a", "left", "--add", "item", "b", "left",
                         "--add", "bracket", "group", "a", "/^b$/", "--set", "group", "background.color=0x40ffffff"])
@@ -216,27 +216,27 @@ final class ComponentTests: XCTestCase {
         XCTAssertTrue(apple.props.popup.background.drawing)
         XCTAssertEqual(model.popupItems(of: "apple").map(\.name), ["apple.prefs", "apple.lock"])
         XCTAssertEqual(model.members(of: model.item(named: "group")!), ["a", "b"])
-        _ = run(model, ["--rename", "apple", "logo"])
+        _ = send(model, ["--rename", "apple", "logo"])
         XCTAssertEqual(model.popupItems(of: "logo").map(\.name), ["apple.prefs", "apple.lock"]) // popups follow
-        XCTAssertNotNil(run(model, ["--set", "logo", "popup.align=top"]).errors.first)
+        XCTAssertNotNil(send(model, ["--set", "logo", "popup.align=top"]).errors.first)
     }
 
     func testGraph() {
         let model = BarModel()
-        _ = run(model, ["--add", "graph", "cpu", "right", "3", "--set", "cpu", "graph.color=0xff00ff00"])
+        _ = send(model, ["--add", "graph", "cpu", "right", "3", "--set", "cpu", "graph.color=0xff00ff00"])
         XCTAssertEqual(model.item(named: "cpu")?.props.graph.width, 3)
         XCTAssertNil(model.item(named: "cpu")?.props.width) // the graph is the middle part, the item stays dynamic
-        _ = run(model, ["--push", "cpu", "0.1", "0.2", "2", "-1"])
+        _ = send(model, ["--push", "cpu", "0.1", "0.2", "2", "-1"])
         XCTAssertEqual(model.item(named: "cpu")?.graphValues, [0.2, 1, 0]) // clamped, the newest 3 kept
         XCTAssertEqual(model.item(named: "cpu")?.props.graph.fill, ARGB(0x5500_FF00)) // no fill_color: the color, lighter
-        XCTAssertFalse(run(model, ["--push", "cpu", "x"]).errors.isEmpty)
-        _ = run(model, ["--add", "item", "plain", "left"])
-        XCTAssertFalse(run(model, ["--push", "plain", "0.5"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--push", "cpu", "x"]).errors.isEmpty)
+        _ = send(model, ["--add", "item", "plain", "left"])
+        XCTAssertFalse(send(model, ["--push", "plain", "0.5"]).errors.isEmpty)
     }
 
     func testSlider() {
         let model = BarModel()
-        _ = run(model, ["--add", "slider", "volume", "right", "100", "--set", "volume", "script=vol", "slider.knob=o", "slider.knob.color=0xffff0000",
+        _ = send(model, ["--add", "slider", "volume", "right", "100", "--set", "volume", "script=vol", "slider.knob=o", "slider.knob.color=0xffff0000",
                         "slider.percentage=150", "--subscribe", "volume", "mouse.clicked"])
         let slider = model.item(named: "volume")!.props.slider
         XCTAssertEqual(slider.width, 100)
@@ -251,7 +251,7 @@ final class ComponentTests: XCTestCase {
 
     func testSpaces() {
         let model = BarModel()
-        _ = run(model, ["--add", "space", "space.1", "left", "--set", "space.1", "space=1", "script=s",
+        _ = send(model, ["--add", "space", "space.1", "left", "--set", "space.1", "space=1", "script=s",
                         "--add", "space", "space.2", "left", "--set", "space.2", "space=2", "script=s",
                         "--add", "item", "watcher", "right", "--set", "watcher", "script=w", "--subscribe", "watcher", "space_change"])
         model.currentSpaces = [1: 2]
@@ -327,8 +327,8 @@ final class AnimationTests: XCTestCase {
         let model = BarModel()
         var now = 100.0
         model.clock = { now }
-        _ = run(model, ["--add", "item", "a", "left", "--set", "a", "y_offset=0", "label.color=0xff000000"])
-        let outcome = run(model, ["--animate", "linear", "30", "--set", "a", "y_offset=10", "label.color=0xffffffff", "label=new"])
+        _ = send(model, ["--add", "item", "a", "left", "--set", "a", "y_offset=0", "label.color=0xff000000"])
+        let outcome = send(model, ["--animate", "linear", "30", "--set", "a", "y_offset=10", "label.color=0xffffffff", "label=new"])
         XCTAssertTrue(outcome.animating)
         let a = { model.displayed(model.item(named: "a")!) }
         XCTAssertEqual(model.item(named: "a")?.props.yOffset, 10) // the model holds the target
@@ -338,7 +338,7 @@ final class AnimationTests: XCTestCase {
         XCTAssertEqual(a().yOffset, 5, accuracy: 1e-9)
         XCTAssertEqual(a().label.color.value, 0xFF80_8080)
         // a new animation starts from where the item is
-        _ = run(model, ["--animate", "linear", "60", "--set", "a", "y_offset=0"])
+        _ = send(model, ["--animate", "linear", "60", "--set", "a", "y_offset=0"])
         XCTAssertEqual(a().yOffset, 5, accuracy: 1e-9)
         now += 0.5
         XCTAssertEqual(a().yOffset, 2.5, accuracy: 1e-9)
@@ -347,17 +347,17 @@ final class AnimationTests: XCTestCase {
         XCTAssertFalse(model.isAnimating)
         XCTAssertEqual(a().yOffset, 0)
         // without --animate, at once; --animate lasts for its message only
-        _ = run(model, ["--set", "a", "y_offset=7"])
+        _ = send(model, ["--set", "a", "y_offset=7"])
         XCTAssertEqual(a().yOffset, 7)
         XCTAssertFalse(model.isAnimating)
-        XCTAssertFalse(run(model, ["--animate", "bounce", "10"]).errors.isEmpty)
+        XCTAssertFalse(send(model, ["--animate", "bounce", "10"]).errors.isEmpty)
     }
 
     func testAnimatedBar() {
         let model = BarModel()
         var now = 0.0
         model.clock = { now }
-        _ = run(model, ["--animate", "sin", "60", "--bar", "height=40"])
+        _ = send(model, ["--animate", "sin", "60", "--bar", "height=40"])
         XCTAssertTrue(model.isBarAnimating)
         XCTAssertEqual(model.displayedBar.height, 25)
         now = 1
