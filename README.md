@@ -102,7 +102,7 @@ skylandbar --query bar
              --set island notch.width=340 notch.corner_radius=22 notch.animation=tanh notch.animation_frames=18 \
              --add item island.song popup.island \
              --set island.song icon=󰝚 label="Rien en lecture" label.max_chars=40 scroll_texts=on \
-                   script='sketchybar --set $NAME label="$(echo "$INFO" | jq -r \'.artist + " — " + .title\')"' \
+                   script='sketchybar --set $NAME label="$(echo "$INFO" | jq -r ".artist + \" — \" + .title")"' \
              --subscribe island.song media_change \
              --add slider island.volume popup.island 260 \
              --set island.volume icon=󰕾 slider.percentage=50 slider.background.height=5 slider.background.corner_radius=3 \
