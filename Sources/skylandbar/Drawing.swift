@@ -563,11 +563,10 @@ final class BarWindow {
     /// 1-based, NSScreen order (1 = main)
     let display: Int
     private let root = FlippedView()
-    private var panelGlass: NSView?
-    private var itemGlass: [NSView] = []
-    /// the item glass views' parent: an NSGlassEffectContainerView's content (macOS 26),
-    /// which renders them in one pass and merges those closer than its spacing
-    private var glassHolder: NSView?
+    /// the glass under the items (LiquidGlass/): its engine's view fills the window
+    private var glass: GlassRenderer?
+    private var glassEngine: String?
+    private var glassFailed = false
 
     init(display: Int) {
         self.display = display
@@ -636,43 +635,33 @@ final class BarWindow {
         CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), UInt32(panel.windowNumber), Int32(radius))
     }
 
-    /// Glass views under the view: one for the window when its style asks for it, one per
-    /// glass background; call it after setting the view's items.
-    func updateGlass() {
+    /// The glass under the items: the window's own when its style asks for it, then each
+    /// glass background, drawn by the engine `settings` gives (see LiquidGlass/). Call it
+    /// after setting the view's items, and when the window moves.
+    func updateGlass(_ settings: GlassSettings) {
         let style = view.style
+        var shapes: [GlassShape] = []
         if style.glass != "off" {
-            let glass = panelGlass ?? Glass.makeView()
-            if panelGlass == nil {
-                glass.frame = root.bounds
-                glass.autoresizingMask = [.width, .height]
-                root.addSubview(glass, positioned: .below, relativeTo: nil)
-                panelGlass = glass
+            shapes.append(GlassShape(rect: view.bounds, radius: style.cornerRadius, tint: style.color, style: style.glass))
+        }
+        for background in view.glassBackgrounds() {
+            shapes.append(GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),
+                                     tint: background.background.color, style: background.background.glass))
+        }
+        // an engine that failed (the capture stopped) gives way to the backdrop, for good
+        if glass?.failed == true { glassFailed = true }
+        let engine = shapes.isEmpty ? nil : glassFailed ? "backdrop" : GlassEngine.resolve(settings.engine)
+        if engine != glassEngine {
+            glass?.view.removeFromSuperview()
+            glass = engine.map(GlassEngine.make)
+            glassEngine = engine
+            if let view = glass?.view {
+                view.frame = root.bounds
+                view.autoresizingMask = [.width, .height]
+                root.addSubview(view, positioned: .below, relativeTo: self.view)
             }
-            Glass.update(glass, style: style.glass, tint: style.color, cornerRadius: style.cornerRadius)
-        } else if let glass = panelGlass {
-            glass.removeFromSuperview()
-            panelGlass = nil
         }
-        let backgrounds = view.glassBackgrounds()
-        if glassHolder == nil && !backgrounds.isEmpty {
-            let (container, holder) = Glass.makeContainer()
-            container.frame = root.bounds
-            container.autoresizingMask = [.width, .height]
-            root.addSubview(container, positioned: .below, relativeTo: view)
-            glassHolder = holder
-        }
-        if let glassHolder { Glass.setSpacing(glassHolder, style.glassSpacing) }
-        while itemGlass.count > backgrounds.count { itemGlass.removeLast().removeFromSuperview() }
-        while itemGlass.count < backgrounds.count {
-            let glass = Glass.makeView()
-            glassHolder?.addSubview(glass)
-            itemGlass.append(glass)
-        }
-        for (glass, background) in zip(itemGlass, backgrounds) {
-            glass.frame = background.rect
-            Glass.update(glass, style: background.background.glass, tint: background.background.color,
-                         cornerRadius: view.radius(background.background, background.rect))
-        }
+        glass?.update(shapes, settings: settings, window: panel)
     }
 }
 

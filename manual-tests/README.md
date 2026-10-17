@@ -30,5 +30,6 @@ Ils marchent depuis fish : ils tournent avec `bash`. Pour un autre binaire :
 | `14-notch.sh` | l'encoche façon boringNotch : survol, animation, contenu, script, `fake` |
 | `15-toml.sh` | `skylandbar.toml` : `--export`, `--check`, chargement, hotload |
 | `16-liquid-glass.sh` | le thème Liquid Glass : capsules, survol, popup, clair / sombre, accessibilité |
+| `17-glass-engines.sh` | moteurs de verre : `metal` (réfraction), `backdrop`, `system`, réglages, fusion |
 
 Note ce qui ne va pas (le numéro du script et la case) et envoie-le avec une capture.

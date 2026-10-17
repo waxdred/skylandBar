@@ -66,6 +66,12 @@ padding_left = 8
 padding_right = 8
 corner_radius = 20         # what "concentric" corners inside the bar follow
 glass_spacing = 8          # glass shapes nearer than 8 pt merge (NSGlassEffectContainerView)
+# who draws the glass: auto takes Apple's on macOS 26, else skylandbar's Metal glass
+# (refraction, rim light; needs Screen Recording), else Core Animation's blur
+glass_engine = "auto"
+glass_refraction = 14      # how far the edges bend what is behind, points
+glass_blur = 2
+glass_saturation = 1.6
 font_smoothing = false
 
 [defaults]

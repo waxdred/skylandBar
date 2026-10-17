@@ -761,6 +761,13 @@ final class LiquidGlassTests: XCTestCase {
         var bar = BarProps()
         XCTAssertNil(bar.apply("glass_spacing", "8"))
         XCTAssertEqual(bar.glassSpacing, 8)
+        XCTAssertNil(bar.apply("glass_engine", "metal"))
+        XCTAssertNotNil(bar.apply("glass_engine", "opengl"))
+        XCTAssertNil(bar.apply("glass_refraction", "20"))
+        XCTAssertNil(bar.apply("glass_saturation", "1.8"))
+        XCTAssertEqual(bar.glassEngine, "metal")
+        XCTAssertEqual(bar.glassRefraction, 20)
+        XCTAssertEqual(bar.json["glass_engine"] as? String, "metal")
     }
 
     func testReduceMotion() {

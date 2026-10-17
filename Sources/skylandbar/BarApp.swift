@@ -603,7 +603,8 @@ final class BarApp {
                 frames[shown[index].name, default: [:]]["display-\(window.display)"] = Box(x: x, y: 0, width: lengths[index], height: height)
                 anchors[shown[index].name] = (NSRect(x: frame.minX + x, y: frame.minY, width: lengths[index], height: frame.height), window.display)
             }
-            if window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar)) { window.updateGlass() }
+            window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar))
+            window.updateGlass(GlassSettings(bar: bar)) // every layout: the metal glass follows the window
         }
         layoutPopups(bar: bar, anchors: &anchors, frames: &frames)
         layoutNotch(frames: &frames)
@@ -673,7 +674,8 @@ final class BarApp {
             frames[children[index].name, default: [:]]["popup.\(parent.name)"] = Box(x: place.x, y: place.y, width: lengths[index], height: row)
             anchors[children[index].name] = (NSRect(x: x + place.x, y: y + laid.height - place.y - row, width: lengths[index], height: row), anchor.display)
         }
-        if window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing)) { window.updateGlass() }
+        window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing))
+        window.updateGlass(GlassSettings(bar: bar))
         window.panel.orderFrontRegardless()
     }
 

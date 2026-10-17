@@ -104,6 +104,22 @@ cp examples/liquid-glass.toml ~/.config/skylandbar/skylandbar.toml
 | SF Pro 11 pt or more, no Thin / Light; SF Symbols; 8 pt grid | the theme's fonts, icons and paddings |
 | Reduce Transparency, Increase Contrast, Reduce Motion | the first two change the system's glass by themselves; Reduce Motion ends skylandbar's animations at once |
 
+### Glass engines: Liquid Glass before macOS 26 too
+
+Apple's `NSGlassEffectView` exists only on macOS 26. skylandbar draws its glass with one of three
+engines (`--bar glass_engine=...`, `auto` by default, which takes the first this Mac can do):
+
+| Engine | What it is | Needs |
+| --- | --- | --- |
+| `system` | Apple's NSGlassEffectView in an NSGlassEffectContainerView | macOS 26 |
+| `metal` | skylandbar's shader over what is behind the bar (ScreenCaptureKit, without skylandbar's own windows): the edges bend it as a lens would (`glass_refraction`, points), colors split a little there, a light blur (`glass_blur`) and saturation (`glass_saturation`), the glass's own light in dark and light mode, a rim lit from the top left, a sheen, a faint inner shadow; shapes closer than `glass_spacing` melt into one | Screen Recording |
+| `backdrop` | Core Animation's backdrop layer (the window server's blur, saturated) under a tint, a sheen, a rim light and a soft shadow; no refraction | nothing |
+
+The bar says on stderr (or in `~/Library/Logs/skylandbar.log` as a service) which one it took.
+To get `metal`, allow skylandbar in System Settings > Privacy & Security > Screen Recording, then
+restart it (`--bar glass_engine=metal` asks once). The capture only covers the bar and a margin
+around it, and sends a frame only when what is behind changes.
+
 What makes this possible, for any config:
 
 - `include = "themes/x.toml"` (before any section, relative to the config's folder): a theme's

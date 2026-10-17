@@ -26,6 +26,9 @@ let package = Package(
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreWLAN"),
                 .linkedFramework("ScreenCaptureKit"),
+                .linkedFramework("Metal"),
+                .linkedFramework("CoreVideo"),
+                .linkedFramework("CoreMedia"),
             ]
         ),
         .testTarget(name: "SkylandBarCoreTests", dependencies: ["SkylandBarCore"]),
