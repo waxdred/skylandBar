@@ -89,7 +89,12 @@ enum GlassLook {
                 "inputAberrationAmount": (0.3 + 0.3 * lift) * band, "inputAberrationHeight": band,
                 "inputBlurRadius": settings.blur * 0.3,
                 "inputFaceColorMatrixWhite": 1.32 + 0.1 * lift, "inputFaceColorMatrixBlack": 0.1,
-                "inputKeyFillHighlightAmount": 0.9 + 0.3 * lift,
+                // a double rim, brighter than the groups': it stands out of them
+                "inputKeyFillHighlightAmount": 0.8 + 0.3 * lift,
+                "inputRingShadowOpacity": 0.4, "inputRingShadowOffset": 2, "inputRingShadowStrokeWidth": 1.2,
+                "inputRingShadowBlurRadius": 1.5,
+                "inputShadowOpacity": 0.35 + 0.15 * lift, "inputShadowAmount": 4 + 3 * lift, "inputShadowHeight": 4 + 3 * lift,
+                "inputShadowBlurRadius": 5 + 3 * lift,
             ]
         } else {
             let band = min(2.3 * settings.refraction, max(2, height / 4))
@@ -97,6 +102,11 @@ enum GlassLook {
                 "inputInnerRefractionAmount": -2.5 * band, "inputInnerRefractionHeight": band,
                 "inputAberrationAmount": 0.2 * band, "inputAberrationHeight": band,
                 "inputBlurRadius": settings.blur / 2,
+                // relief: a double rim (light all around, a thin shade just inside) and a soft shadow
+                "inputKeyFillHighlightAmount": 0.6,
+                "inputRingShadowOpacity": 0.3, "inputRingShadowOffset": 2, "inputRingShadowStrokeWidth": 1.2,
+                "inputRingShadowBlurRadius": 1.5,
+                "inputShadowOpacity": 0.3, "inputShadowAmount": 4, "inputShadowHeight": 4, "inputShadowBlurRadius": 5,
             ]
         }
         values.merge([
@@ -125,6 +135,52 @@ enum GlassLook {
         }
         for sublayer in layer.sublayers ?? [] { found += backdrops(sublayer) }
         return found
+    }
+}
+
+/// The double rim over a glass shape (GlassRim.layer): an outer line lit from the top left,
+/// fading toward the bottom, and an inner one, 1.5 pt in, lit from the bottom right (the light
+/// coming back through the glass's thickness): a bevel, the glass standing off what is behind.
+final class GlassRim: CALayer {
+    private let outer = CAGradientLayer(), outerMask = CAShapeLayer()
+    private let inner = CAGradientLayer(), innerMask = CAShapeLayer()
+
+    override init() {
+        super.init()
+        for (gradient, mask) in [(outer, outerMask), (inner, innerMask)] {
+            mask.fillColor = nil
+            mask.strokeColor = NSColor.black.cgColor
+            gradient.mask = mask
+            addSublayer(gradient)
+        }
+        outer.startPoint = CGPoint(x: 0, y: 0) // flipped: the top left
+        outer.endPoint = CGPoint(x: 1, y: 1)
+        inner.startPoint = CGPoint(x: 1, y: 1)
+        inner.endPoint = CGPoint(x: 0, y: 0)
+    }
+
+    override init(layer: Any) { super.init(layer: layer) }
+    required init?(coder: NSCoder) { nil }
+
+    /// `strength`: 1 for a group, more for a lens.
+    func set(_ rect: NSRect, radius: Double, strength: Double) {
+        frame = rect
+        let bounds = CGRect(origin: .zero, size: rect.size)
+        let path = { (inset: CGFloat) -> CGPath in
+            let r = bounds.insetBy(dx: inset, dy: inset), corner = max(0, CGFloat(radius) - inset)
+            return CGPath(roundedRect: r, cornerWidth: min(corner, r.height / 2), cornerHeight: min(corner, r.height / 2), transform: nil)
+        }
+        outer.frame = bounds; outerMask.frame = bounds
+        inner.frame = bounds; innerMask.frame = bounds
+        outerMask.path = path(0.5)
+        outerMask.lineWidth = 1
+        innerMask.path = path(2)
+        innerMask.lineWidth = 1
+        let white = { (alpha: Double) in NSColor(white: 1, alpha: min(1, alpha * strength)).cgColor }
+        outer.colors = [white(0.55), white(0.12), white(0.22)]
+        outer.locations = [0, 0.55, 1]
+        inner.colors = [white(0.3), white(0.04), white(0)]
+        inner.locations = [0, 0.5, 1]
     }
 }
 

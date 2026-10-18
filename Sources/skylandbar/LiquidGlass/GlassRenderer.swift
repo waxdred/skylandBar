@@ -122,6 +122,7 @@ final class SystemGlass: GlassRenderer {
     private let drops: (container: NSView, holder: NSView)
     private var bodyViews: [NSView] = []
     private var dropViews: [NSView] = []
+    private var rims: [GlassRim] = []
     let failed = false
 
     init() {
@@ -132,6 +133,7 @@ final class SystemGlass: GlassRenderer {
             part.autoresizingMask = [.width, .height]
             view.addSubview(part)
         }
+        view.wantsLayer = true
     }
 
     func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow) {
@@ -156,6 +158,19 @@ final class SystemGlass: GlassRenderer {
               in: drops.holder, views: &dropViews)
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
+        // the double rims, over all the glass
+        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.map { ($0, 1.5 + 0.5 * $0.lift) }
+        while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
+        while rims.count < rimmed.count {
+            let rim = GlassRim()
+            rim.zPosition = 10 // over the glass views' own layers
+            view.layer?.addSublayer(rim)
+            rims.append(rim)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (rim, (shape, strength)) in zip(rims, rimmed) { rim.set(shape.rect, radius: shape.radius, strength: strength) }
+        CATransaction.commit()
         if let lens = dropShapes.first {
             GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
                             lift: dropShapes.map(\.lift).max() ?? 0)
