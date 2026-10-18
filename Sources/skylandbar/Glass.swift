@@ -71,23 +71,40 @@ enum GlassLook {
     /// for the layers SwiftUI makes after a layout.
     /// `height`: the smallest shape's, which the bent band keeps within (a quarter of it, as
     /// skylandbar's own shader did: a thin bar bent all over was unreadable).
-    static func apply(_ view: NSView, settings: GlassSettings, height: Double) {
-        set(view, settings, height)
-        DispatchQueue.main.async { set(view, settings, height) }
+    /// `lift`: nil for a group's glass; a lens's (0 at rest, 1 moving fast): thicker glass,
+    /// what is behind bent over a wider band and lighter, more so while it moves (as
+    /// skylandbar's own shader did).
+    static func apply(_ view: NSView, settings: GlassSettings, height: Double, lift: Double? = nil) {
+        set(view, settings, height, lift)
+        DispatchQueue.main.async { set(view, settings, height, lift) }
     }
 
-    private static func set(_ view: NSView, _ settings: GlassSettings, _ height: Double) {
+    private static func set(_ view: NSView, _ settings: GlassSettings, _ height: Double, _ lift: Double?) {
         guard let root = view.layer else { return }
-        let band = min(2.3 * settings.refraction, max(2, height / 4))
-        let values: [String: Double] = [
-            "inputInnerRefractionAmount": -2.5 * band, "inputInnerRefractionHeight": band,
-            "inputAberrationAmount": 0.2 * band, "inputAberrationHeight": band,
-            "inputBlurRadius": settings.blur / 2,
+        var values: [String: Double]
+        if let lift { // a drop: half its height bent, its middle magnified, a light of its own
+            let band = max(2, height * (0.34 + 0.1 * lift))
+            values = [
+                "inputInnerRefractionAmount": -(1.8 + 2.4 * lift) * band, "inputInnerRefractionHeight": band,
+                "inputAberrationAmount": (0.3 + 0.3 * lift) * band, "inputAberrationHeight": band,
+                "inputBlurRadius": settings.blur * 0.3,
+                "inputFaceColorMatrixWhite": 1.32 + 0.1 * lift, "inputFaceColorMatrixBlack": 0.1,
+                "inputKeyFillHighlightAmount": 0.9 + 0.3 * lift,
+            ]
+        } else {
+            let band = min(2.3 * settings.refraction, max(2, height / 4))
+            values = [
+                "inputInnerRefractionAmount": -2.5 * band, "inputInnerRefractionHeight": band,
+                "inputAberrationAmount": 0.2 * band, "inputAberrationHeight": band,
+                "inputBlurRadius": settings.blur / 2,
+            ]
+        }
+        values.merge([
             "inputBlurOpacity0": 0.1, "inputBlurOpacity1": 0.1, "inputBlurOpacity2": 0.1, "inputBlurOpacity3": 0.1,
             "inputBlurFillNormalOpacity": 0, "inputBlurFillDarkenOpacity": 0, "inputBlurFillLightenOpacity": 0, "inputBleedAmount": 0,
             "inputFaceColorMatrixSaturation": 1 + (settings.saturation - 1) * 0.6,
             // Apple's luminance cap (0.5) kept: without it a bright wallpaper burned the text out
-        ]
+        ]) { mine, _ in mine }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for backdrop in backdrops(root) {
