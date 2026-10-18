@@ -57,6 +57,60 @@ enum Glass {
     }
 }
 
+// MARK: skylandbar's look on Apple's glass
+
+/// Apple's glass draws what is behind through a private filter (`glassBackground`) on a
+/// CABackdropLayer (in each NSGlassEffectView, or in the container rendering them together), set for a frosted look: a lot of blur, a
+/// narrow refraction, at half resolution. skylandbar sets its own values there: a sharp
+/// middle, what is behind bent hard along the edge, colors split a little, from the bar's
+/// glass_refraction / glass_blur / glass_saturation. Still the window server's glass: live,
+/// no capture. Looked up by name; nothing changes if a macOS has it otherwise.
+enum GlassLook {
+    /// Under `view` (a glass view, or the container that renders its glass views together):
+    /// each glass backdrop gets skylandbar's values. Again on the next turn of the run loop,
+    /// for the layers SwiftUI makes after a layout.
+    /// `height`: the smallest shape's, which the bent band keeps within (a quarter of it, as
+    /// skylandbar's own shader did: a thin bar bent all over was unreadable).
+    static func apply(_ view: NSView, settings: GlassSettings, height: Double) {
+        set(view, settings, height)
+        DispatchQueue.main.async { set(view, settings, height) }
+    }
+
+    private static func set(_ view: NSView, _ settings: GlassSettings, _ height: Double) {
+        guard let root = view.layer else { return }
+        let band = min(2.3 * settings.refraction, max(2, height / 4))
+        let values: [String: Double] = [
+            "inputInnerRefractionAmount": -2.5 * band, "inputInnerRefractionHeight": band,
+            "inputAberrationAmount": 0.2 * band, "inputAberrationHeight": band,
+            "inputBlurRadius": settings.blur / 2,
+            "inputBlurOpacity0": 0.1, "inputBlurOpacity1": 0.1, "inputBlurOpacity2": 0.1, "inputBlurOpacity3": 0.1,
+            "inputBlurFillNormalOpacity": 0, "inputBlurFillDarkenOpacity": 0, "inputBlurFillLightenOpacity": 0, "inputBleedAmount": 0,
+            "inputFaceColorMatrixSaturation": 1 + (settings.saturation - 1) * 0.6,
+            // Apple's luminance cap (0.5) kept: without it a bright wallpaper burned the text out
+        ]
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for backdrop in backdrops(root) {
+            if (backdrop.value(forKey: "scale") as? Double) != 1 { backdrop.setValue(1, forKey: "scale") } // Apple's: half resolution
+            for (key, value) in values where (backdrop.value(forKeyPath: "filters.glassBackground.\(key)") as? Double) != value {
+                backdrop.setValue(value, forKeyPath: "filters.glassBackground.\(key)")
+            }
+        }
+        CATransaction.commit()
+    }
+
+    private static func backdrops(_ layer: CALayer) -> [CALayer] {
+        var found: [CALayer] = []
+        if NSStringFromClass(type(of: layer)) == "CABackdropLayer",
+           (layer.filters as? [NSObject])?.contains(where: { ($0.value(forKey: "name") as? String) == "glassBackground" }) == true
+        {
+            found.append(layer)
+        }
+        for sublayer in layer.sublayers ?? [] { found += backdrops(sublayer) }
+        return found
+    }
+}
+
 /// Glass views are placed in the bar view's flipped coordinates.
 private final class FlippedHolder: NSView {
     override var isFlipped: Bool { true }

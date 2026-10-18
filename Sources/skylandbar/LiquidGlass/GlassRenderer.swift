@@ -90,7 +90,7 @@ enum GlassEngine {
                     asked = true
                     CGRequestScreenCaptureAccess()
                 }
-            default: engine = NativeGlassSupport.available ? "native" : systemAvailable ? "system" : MetalGlass.isAvailable ? "metal" : "backdrop"
+            default: engine = systemAvailable ? "system" : MetalGlass.isAvailable ? "metal" : "backdrop"
         }
         if said.insert("\(setting)>\(engine)").inserted {
             let why = engine == "backdrop" && !systemAvailable
@@ -135,6 +135,8 @@ final class SystemGlass: GlassRenderer {
             glass.frame = shape.rect
             Glass.update(glass, style: shape.style, tint: shape.tint, cornerRadius: shape.radius)
         }
+        GlassLook.apply(view, settings: settings, // the container's glass and its views' own
+                        height: shapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
     }
 }
 
