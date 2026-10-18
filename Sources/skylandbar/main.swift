@@ -49,7 +49,12 @@ if arguments.first == "--help" || arguments.first == "-h" {
 let startsBar = arguments.isEmpty || (arguments.count == 2 && (arguments[0] == "--config" || arguments[0] == "-c"))
 guard startsBar else { exit(Client.send(arguments)) }
 
-if Client.isBarRunning() {
+/// One bar per user: an exclusive lock held as long as the bar runs (the kernel lets it go
+/// when the process ends, even killed). Two bars started together (skyland and a login item)
+/// both passed the socket check before either listened.
+let lockPath = "/tmp/skylandbar-\(NSUserName()).lock"
+let lockFile = open(lockPath, O_CREAT | O_RDWR, 0o644)
+if lockFile < 0 || flock(lockFile, LOCK_EX | LOCK_NB) != 0 || Client.isBarRunning() {
     FileHandle.standardError.write(Data("skylandbar: already running\n".utf8))
     exit(1)
 }
