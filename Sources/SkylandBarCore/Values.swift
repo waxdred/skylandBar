@@ -37,15 +37,18 @@ public struct ARGB: Equatable, Hashable, CustomStringConvertible {
     public var description: String { String(format: "0x%08x", value) }
 
     /// Channel by channel from `a` (t = 0) to `b` (t = 1).
+    /// Premultiplied: a color fading to or from transparent keeps its hue (0x00000000 is not
+    /// black on the way: a straight mix darkened every fade out)
     public static func mix(_ a: ARGB, _ b: ARGB, _ t: Double) -> ARGB {
         if a == b { return b }
-        var result: UInt32 = 0
-        for shift in stride(from: 24, through: 0, by: -8) {
-            let from = Double(a.value >> UInt32(shift) & 0xFF), to = Double(b.value >> UInt32(shift) & 0xFF)
-            let channel = UInt32(min(255, max(0, (from + (to - from) * t).rounded())))
-            result |= channel << UInt32(shift)
+        let lerp = { (x: Double, y: Double) in x + (y - x) * t }
+        let alpha = lerp(a.alpha, b.alpha)
+        guard alpha > 0 else { return ARGB(0) }
+        let channel = { (from: Double, to: Double) -> UInt32 in
+            UInt32(min(255, max(0, (lerp(from * a.alpha, to * b.alpha) / alpha * 255).rounded())))
         }
-        return ARGB(result)
+        let alphaByte = UInt32(min(255, max(0, (alpha * 255).rounded())))
+        return ARGB(alphaByte << 24 | channel(a.red, b.red) << 16 | channel(a.green, b.green) << 8 | channel(a.blue, b.blue))
     }
 }
 

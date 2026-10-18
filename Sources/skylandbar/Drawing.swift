@@ -763,6 +763,15 @@ final class BarWindow {
                 shapes[index].rect.origin.x += dx // the lens on the swiped workspace
             }
         }
+        if glass?.animatesLenses == true { // native: the targets, its own springs; no drawing through
+            var settings = glassSettings
+            settings.following = swipe != nil
+            glass?.update(shapes, settings: settings, window: panel)
+            view.drops = []
+            lensTicker?.stop()
+            lensTicker = nil
+            return
+        }
         let targets = indices.map { Box(x: Double(shapes[$0].rect.minX), y: Double(shapes[$0].rect.minY),
                                         width: Double(shapes[$0].rect.width), height: Double(shapes[$0].rect.height)) }
         let (rects, lifts, tails, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)

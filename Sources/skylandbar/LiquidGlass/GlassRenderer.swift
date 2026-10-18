@@ -1,7 +1,9 @@
 import AppKit
 import SkylandBarCore
 
-// skylandbar's Liquid Glass: the glass under a window's items, drawn by one of three engines.
+// skylandbar's Liquid Glass: the glass under a window's items, drawn by one of four engines.
+//   native    Apple's Liquid Glass through SwiftUI (glassEffect, GlassEffectContainer), its
+//             lenses animated by SwiftUI (macOS 26, built with its SDK; NativeGlass.swift)
 //   system    NSGlassEffectView in an NSGlassEffectContainerView (macOS 26)
 //   metal     what is behind the window (ScreenCaptureKit) through a shader: refraction at
 //             the edges, chromatic aberration, a light blur, saturation, rim light, sheen,
@@ -36,6 +38,8 @@ struct GlassSettings: Equatable {
     var lensStretch = 1.0
     /// the Reduce Motion setting: lenses do not slide
     var reduceMotion = false
+    /// a lens follows the fingers (a workspace swipe): engines that animate lenses keep close
+    var following = false
     /// screen (AppKit) area to see behind even with no glass yet: a glass notch, closed, keeps
     /// what is behind its open size ready, so it has glass from its first frame
     var captureArea: NSRect?
@@ -61,6 +65,13 @@ protocol GlassRenderer: AnyObject {
     /// it cannot go on (metal: the capture stopped): the window takes another engine
     var failed: Bool { get }
     func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow)
+    /// true: given the lenses' targets, it animates them itself (native); false: the bar
+    /// gives it each frame of LensMotion
+    var animatesLenses: Bool { get }
+}
+
+extension GlassRenderer {
+    var animatesLenses: Bool { false }
 }
 
 enum GlassEngine {
@@ -73,6 +84,7 @@ enum GlassEngine {
     static func resolve(_ setting: String) -> String {
         var engine: String
         switch setting {
+            case "native": engine = NativeGlassSupport.available ? "native" : resolve("auto")
             case "system": engine = systemAvailable ? "system" : resolve("auto")
             case "backdrop": engine = "backdrop"
             case "metal":
@@ -93,6 +105,7 @@ enum GlassEngine {
 
     static func make(_ engine: String) -> GlassRenderer {
         switch engine {
+            case "native": return NativeGlassSupport.make() ?? SystemGlass()
             case "system": return SystemGlass()
             case "metal": return MetalGlass() ?? BackdropGlass()
             default: return BackdropGlass()
@@ -102,30 +115,88 @@ enum GlassEngine {
 
 // MARK: system
 
-/// Apple's glass: an NSGlassEffectView per shape, in an NSGlassEffectContainerView.
+/// Apple's glass: an NSGlassEffectView per shape, in NSGlassEffectContainerViews: one for the
+/// groups (closer than glass_spacing they melt), one over it for lenses and hover drops, glass
+/// of their own; a lens's drop left behind melts into it there, as a liquid would. skylandbar's
+/// look on it all (GlassLook).
 final class SystemGlass: GlassRenderer {
-    let view: NSView
-    private let holder: NSView
-    private var glasses: [NSView] = []
+    let view: NSView = FlippedView()
+    private let bodies: (container: NSView, holder: NSView)
+    private let drops: (container: NSView, holder: NSView)
+    private var bodyViews: [NSView] = []
+    private var dropViews: [NSView] = []
+    private var rims: [GlassRim] = []
     let failed = false
 
     init() {
-        (view, holder) = Glass.makeContainer()
+        bodies = Glass.makeContainer()
+        drops = Glass.makeContainer()
+        for part in [bodies.container, drops.container] {
+            part.frame = view.bounds
+            part.autoresizingMask = [.width, .height]
+            view.addSubview(part)
+        }
+        view.wantsLayer = true
     }
 
     func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow) {
-        Glass.setSpacing(holder, settings.spacing)
-        while glasses.count > shapes.count { glasses.removeLast().removeFromSuperview() }
-        while glasses.count < shapes.count {
+        let isDrop = { (style: String) in style == "lens" || style == "hover" }
+        var groupShapes: [GlassShape] = [], dropShapes: [GlassShape] = []
+        for shape in shapes {
+            guard isDrop(shape.style) else { groupShapes.append(shape); continue }
+            dropShapes.append(shape)
+            if let tail = shape.tail, tail.width > 0 { // its drop left behind, the same glass
+                var drop = shape
+                drop.rect = tail
+                drop.radius = min(shape.radius, Double(min(tail.width, tail.height)) / 2)
+                drop.tail = nil
+                dropShapes.append(drop)
+            }
+        }
+        Glass.setSpacing(bodies.holder, settings.spacing)
+        Glass.setSpacing(drops.holder, 14) // a lens and its drop melt while near
+        place(groupShapes, in: bodies.holder, views: &bodyViews)
+        // Apple's tint is dense: a drop at half its tint keeps what is behind showing through it
+        place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32(d.tint.alpha * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
+              in: drops.holder, views: &dropViews)
+        GlassLook.apply(bodies.container, settings: settings,
+                        height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
+        // the double rims, over all the glass
+        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.map { ($0, 1.5 + 0.5 * $0.lift) }
+        while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
+        while rims.count < rimmed.count {
+            let rim = GlassRim()
+            rim.zPosition = 10 // over the glass views' own layers
+            view.layer?.addSublayer(rim)
+            rims.append(rim)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (rim, (shape, strength)) in zip(rims, rimmed) { rim.set(shape.rect, radius: shape.radius, strength: strength) }
+        CATransaction.commit()
+        if let lens = dropShapes.first {
+            GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
+                            lift: dropShapes.map(\.lift).max() ?? 0)
+        }
+    }
+
+    private func place(_ shapes: [GlassShape], in holder: NSView, views: inout [NSView]) {
+        while views.count > shapes.count { views.removeLast().removeFromSuperview() }
+        while views.count < shapes.count {
             let glass = Glass.makeView()
             holder.addSubview(glass)
-            glasses.append(glass)
+            views.append(glass)
         }
-        for (glass, shape) in zip(glasses, shapes) {
+        for (glass, shape) in zip(views, shapes) {
             glass.frame = shape.rect
             Glass.update(glass, style: shape.style, tint: shape.tint, cornerRadius: shape.radius)
         }
     }
+}
+
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: backdrop
