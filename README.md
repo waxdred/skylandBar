@@ -4,6 +4,10 @@ A status bar for macOS, written in Swift for macOS 14 to 26: the bar of
 [skyland](https://github.com/waxdred/skyland). It is set up by a TOML file, or by
 `skylandbar --add/--set ...` commands from a shell or a script.
 
+**Documentation: [docs/](docs/README.md)** (install, configuration, reference, components, Liquid
+Glass, skyland, migrating from SketchyBar, recipes, troubleshooting), and
+[docs/ai-setup.md](docs/ai-setup.md) for an AI assistant setting the bar up for you.
+
 ## Build and run
 
 ```sh
