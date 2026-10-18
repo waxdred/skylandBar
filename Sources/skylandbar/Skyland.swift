@@ -55,6 +55,11 @@ enum SkylandSocket {
     /// Runs a command and waits for its answer, on this thread (the bar quitting).
     static func runNow(_ args: [String]) {
         guard let fd = open() else { return }
+        // a second at most: a window manager quitting at the same time never answered, and the
+        // bar hung there for good, its lock held (no new bar could start)
+        var limit = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
         if send(fd, args) { _ = receive(fd) }
         close(fd)
     }
@@ -120,11 +125,13 @@ final class SkylandEvents {
         guard SkylandSocket.send(fd, ["subscribe", "--all"]) else { return }
         DispatchQueue.main.async { [weak self] in self?.onConnect?() }
         while let message = SkylandSocket.receive(fd) {
-            guard let event = (try? JSONSerialization.jsonObject(with: message)) as? [String: Any] else { continue }
-            let info = String(decoding: message, as: UTF8.self)
-            let events = skylandEvent(event)
-            DispatchQueue.main.async { [weak self] in
-                for (name, env) in events { self?.onEvent?(name, env.merging(["INFO": info]) { a, _ in a }) }
+            autoreleasepool { // its own thread, never back to a run loop: each event's JSON stayed for good
+                guard let event = (try? JSONSerialization.jsonObject(with: message)) as? [String: Any] else { return }
+                let info = String(decoding: message, as: UTF8.self)
+                let events = skylandEvent(event)
+                DispatchQueue.main.async { [weak self] in
+                    for (name, env) in events { self?.onEvent?(name, env.merging(["INFO": info]) { a, _ in a }) }
+                }
             }
         }
     }

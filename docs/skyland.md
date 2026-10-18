@@ -15,6 +15,7 @@ skylandbar subscribes to skyland's socket and sends these events to the items su
 | `skyland_mode_change`, `aerospace_mode_change` | `MODE` |
 | `skyland_window_detected` | `WINDOW_ID`, `WORKSPACE`, `APP_NAME`, `APP_BUNDLE_ID` |
 | `skyland_binding` | `MODE`, `BINDING` |
+| `skyland_workspace_swipe` | `FOCUSED_WORKSPACE`, `TARGET_WORKSPACE` (empty once the fingers lift), `PROGRESS` (0 to 1): a trackpad swipe in progress; the workspaces' lens follows it by itself |
 
 If skyland quits and comes back, skylandbar reconnects by itself. Configs written for AeroSpace
 that use `aerospace_workspace_change` work as they are; remove `exec-on-workspace-change` from the
