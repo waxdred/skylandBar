@@ -68,6 +68,19 @@ reads the TOML or `sketchybarrc` you already have:
 
 ## Install
 
+With [Homebrew](https://github.com/waxdred/homebrew-tap):
+
+```sh
+brew install waxdred/tap/skylandbar
+mkdir -p ~/.config/skylandbar/themes
+cp "$(brew --prefix)"/share/skylandbar/themes/liquid-glass.toml ~/.config/skylandbar/themes/
+cp "$(brew --prefix)"/share/skylandbar/examples/liquid-glass.toml ~/.config/skylandbar/skylandbar.toml
+skylandbar --check            # "ok, N items"
+skylandbar --service install  # starts now and at every login
+```
+
+From source:
+
 ```sh
 git clone https://github.com/waxdred/skylandBar && cd skylandBar
 swift build -c release
