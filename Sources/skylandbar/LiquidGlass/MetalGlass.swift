@@ -62,6 +62,7 @@ final class MetalGlass: GlassRenderer {
         self.shapes = shapes
         self.settings = settings
         self.window = window
+        capture.live = settings.capture == "live"
         if shapes.isEmpty && settings.captureArea == nil {
             capture.stop()
         } else if let screen = window.screen ?? NSScreen.main,
@@ -178,8 +179,28 @@ private final class MetalHost: NSView {
 /// larger than the window (so a window moving a few points needs no new stream), without
 /// skylandbar's own windows. Frames come only when what is there changes.
 final class BackdropCapture: NSObject, SCStreamOutput, SCStreamDelegate {
+    /// Posted when what is behind the bar may have changed (a workspace, the front app, the
+    /// wallpaper): snapshots are taken again.
+    static let behindChanged = Notification.Name("skylandbar.behindChanged")
+
     var onFrame: ((CVPixelBuffer) -> Void)?
     var onFailure: (() -> Void)?
+    /// a capture stream (what is behind as it moves); false: one picture at a time, which
+    /// leaves protected videos alone (a running capture turns them black)
+    var live = false {
+        didSet { if live != oldValue { stop(); region = .zero } } // the next follow starts the other way
+    }
+    private var behind: NSObjectProtocol?
+
+    override init() {
+        super.init()
+        behind = NotificationCenter.default.addObserver(forName: Self.behindChanged, object: nil, queue: .main) { [weak self] _ in
+            guard let self, !self.live, self.region != .zero, !self.asking else { return }
+            self.start()
+        }
+    }
+
+    deinit { behind.map(NotificationCenter.default.removeObserver) }
     /// the part of the display captured, in its points, top-left origin
     private(set) var region = CGRect.zero
     private var scale: CGFloat = 2
@@ -235,6 +256,13 @@ final class BackdropCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 configuration.pixelFormat = kCVPixelFormatType_32BGRA
                 configuration.showsCursor = false
                 configuration.queueDepth = 3
+                if !self.live {
+                    SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: configuration) { [weak self] sample, _ in
+                        guard let buffer = sample.flatMap(CMSampleBufferGetImageBuffer) else { return }
+                        DispatchQueue.main.async { self?.onFrame?(buffer) }
+                    }
+                    return
+                }
                 if let stream = self.stream {
                     stream.updateContentFilter(filter, completionHandler: nil)
                     stream.updateConfiguration(configuration, completionHandler: nil)
