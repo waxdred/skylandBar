@@ -125,9 +125,11 @@ final class Server {
         if stat(Socket.path, &info) == 0 { inode = info.st_ino }
         let listener = fd, handle = self.handle
         let thread = Thread {
-            while true {
+            // a pool per message: this thread never goes back to a run loop, and what each
+            // message autoreleased stayed for good (the bar grew by its scripts' --set calls)
+            while true { autoreleasepool {
                 let client = accept(listener, nil, nil)
-                if client < 0 { continue }
+                if client < 0 { return }
                 Socket.noSigPipe(client)
                 let data = Socket.readAll(client)
                 var arguments = data.split(separator: 0, omittingEmptySubsequences: false).map { String(decoding: $0, as: UTF8.self) }
@@ -138,7 +140,7 @@ final class Server {
                 out.append(Data(reply.text.utf8))
                 _ = Socket.writeAll(client, out)
                 close(client)
-            }
+            } }
         }
         thread.name = "skylandbar socket"
         thread.start()
