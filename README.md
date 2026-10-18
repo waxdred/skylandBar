@@ -156,3 +156,7 @@ Sources/skylandbar       AppKit: windows, drawing, Liquid Glass, socket server a
 Tests                    XCTest for the core
 manual-tests             one script per area, with what to check
 ```
+
+## License
+
+[MIT](LICENSE)
