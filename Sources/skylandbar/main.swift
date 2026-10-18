@@ -6,7 +6,7 @@ import SkylandBarCore
 //   skylandbar --config <file> start the bar with that config
 //   skylandbar --bar ... --add item ... --set ...   talk to the running bar
 
-let version = "0.12.0"
+let version = "0.12.1"
 let usage = """
     usage: skylandbar [--config <file>]       start the bar
            skylandbar --service install|uninstall    start it at login (launchd)

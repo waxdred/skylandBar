@@ -2,6 +2,11 @@
 
 Each `## vX.Y.Z` section is also the text of its GitHub release.
 
+## v0.12.1
+
+- builds with an SDK older than macOS 26 (Homebrew's Command Line Tools with Swift 6.2):
+  Apple's glass views are looked up at run time, and still used on macOS 26
+
 ## v0.12.0
 
 The first release: a status bar for macOS 14 to 26 in Liquid Glass, the bar of

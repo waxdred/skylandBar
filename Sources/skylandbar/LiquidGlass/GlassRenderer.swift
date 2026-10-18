@@ -61,12 +61,7 @@ protocol GlassRenderer: AnyObject {
 }
 
 enum GlassEngine {
-    static var systemAvailable: Bool {
-        #if compiler(>=6.2)
-            if #available(macOS 26.0, *) { return true }
-        #endif
-        return false
-    }
+    static var systemAvailable: Bool { Glass.effectView != nil }
 
     private static var said = Set<String>()
     private static var asked = false
