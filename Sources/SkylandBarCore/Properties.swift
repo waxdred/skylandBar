@@ -244,7 +244,7 @@ public struct TextProps: Equatable {
     }
 }
 
-public let itemPositions = ["left", "right", "center", "q", "e"]
+public let itemPositions = ["left", "right", "center", "q", "e", "center_left", "center_right"]
 
 public struct ItemProps: Equatable {
     public var drawing = true

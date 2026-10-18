@@ -1,6 +1,7 @@
 /// Where items go on a bar: `left` items from the left edge in the order
 /// they were added, `right` items from the right edge (the first one added is the
-/// rightmost), `center` items centered, `q` / `e` items to the left / right of the notch.
+/// rightmost), `center` items centered, `q` / `e` items to the left / right of the notch,
+/// `center_left` / `center_right` items centered between the left / right items and the notch.
 /// An item takes `background.padding_left + length + background.padding_right`, or just its
 /// fixed `width` (the paddings inside it); its content (and background) starts after
 /// `background.padding_left`.
@@ -54,6 +55,13 @@ public enum Layout {
         forward(center, from: (width - center.reduce(0) { $0 + $1.span }) / 2)
         backward(slots.filter { $0.position == "q" }, from: notchLeft)
         forward(slots.filter { $0.position == "e" }, from: notchLeft + notchWidth)
+        // center_left / center_right: centered in the room between the left (right) items and
+        // the notch's q (e) items, or the notch
+        let span = { (position: String) in slots.filter { $0.position == position }.reduce(0) { $0 + $1.span } }
+        let leftEnd = paddingLeft + span("left"), rightStart = width - paddingRight - span("right")
+        let qStart = notchLeft - span("q"), eEnd = notchLeft + notchWidth + span("e")
+        forward(slots.filter { $0.position == "center_left" }, from: (leftEnd + qStart - span("center_left")) / 2)
+        forward(slots.filter { $0.position == "center_right" }, from: (eEnd + rightStart - span("center_right")) / 2)
         return result
     }
 

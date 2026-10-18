@@ -118,6 +118,12 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(xs["c"], 479.5) // (1000 - 45) / 2 + 2
         XCTAssertEqual(xs["q"], 387) // 400 - 3 - 10
         XCTAssertEqual(xs["e"], 602) // 600 + 2
+        // center_left: between the left items (end 5 + 15 + 25 = 45) and q (387 - 2 = 385)
+        let cl = Layout.place([slot("a", "left", 10), slot("b", "left", 20), slot("q", "q", 10), slot("c", "center_left", 40),
+                               slot("r", "right", 10), slot("cr", "center_right", 40)],
+                              width: 1000, paddingLeft: 5, paddingRight: 7, notchWidth: 200, notchOffset: 0)
+        XCTAssertEqual(cl["c"], 194.5) // (45 + 385 - 45) / 2 + 2
+        XCTAssertEqual(cl["cr"], 768.5) // between e (600) and the right items (993 - 15 = 978): (600 + 978 - 45) / 2 + 2
 
         // a fixed width holds the paddings: the next item starts right after it
         let fixed = Layout.Slot(name: "f", position: "left", length: 36, paddingLeft: 4, paddingRight: 4, fixed: true)
