@@ -25,11 +25,11 @@ final class MachServer {
         guard !names.isEmpty else { return }
         let handle = self.handle
         let thread = Thread {
-            while true {
+            while true { autoreleasepool { // a pool per message (see Server)
                 var data: UnsafeMutablePointer<CChar>? = nil
                 var length: UInt32 = 0
                 var reply: UInt32 = 0
-                guard skyland_mach_receive(port, &data, &length, &reply) else { continue }
+                guard skyland_mach_receive(port, &data, &length, &reply) else { return }
                 var bytes: [UInt8] = []
                 if let data {
                     bytes = Array(UnsafeBufferPointer(start: UnsafeRawPointer(data).assumingMemoryBound(to: UInt8.self), count: Int(length)))
@@ -38,7 +38,7 @@ final class MachServer {
                 let arguments = Wire.arguments(bytes)
                 var answer: (ok: Bool, text: String) = (true, "")
                 if !arguments.isEmpty { DispatchQueue.main.sync { answer = handle(arguments) } }
-                guard reply != 0 else { continue }
+                guard reply != 0 else { return }
                 // the CLI prints the answer, a NUL-ended string; "[!]..." is an error
                 var text = Array(answer.text.utf8)
                 text.append(0)
@@ -46,7 +46,7 @@ final class MachServer {
                     buffer.withMemoryRebound(to: CChar.self) { _ = skyland_mach_send(reply, $0.baseAddress, UInt32($0.count)) }
                 }
                 skyland_mach_release(reply)
-            }
+            } }
         }
         thread.name = "skylandbar mach"
         thread.start()
