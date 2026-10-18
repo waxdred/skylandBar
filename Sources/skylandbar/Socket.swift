@@ -23,6 +23,14 @@ enum Socket {
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
     }
 
+    /// Reads and writes give up after `seconds`: one peer that never ends its message kept
+    /// the bar's socket for good, and every script's --set piled up behind it.
+    static func timeout(_ fd: Int32, _ seconds: Int) {
+        var limit = timeval(tv_sec: seconds, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+    }
+
     /// A connection to the running bar, nil when there is none.
     static func connectToBar() -> Int32? {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -80,6 +88,7 @@ enum Client {
             return 1
         }
         defer { close(fd) }
+        Socket.timeout(fd, 5)
         var message = Data()
         for argument in arguments {
             message.append(contentsOf: Array(argument.utf8))
@@ -131,6 +140,7 @@ final class Server {
                 let client = accept(listener, nil, nil)
                 if client < 0 { return }
                 Socket.noSigPipe(client)
+                Socket.timeout(client, 2)
                 let data = Socket.readAll(client)
                 var arguments = data.split(separator: 0, omittingEmptySubsequences: false).map { String(decoding: $0, as: UTF8.self) }
                 if arguments.last == "" { arguments.removeLast() }
