@@ -64,6 +64,7 @@ final class BarApp {
         // SbarLua finds the bar by BAR_NAME: the compatibility name when we hold it (Mach.swift)
         scripts.barName = mach.names.first { $0 == "sketchybar" } ?? "skylandbar"
         events.onEvent = { [unowned self] event, info in
+            if ["space_change", "front_app_switched", "display_change", "system_woke"].contains(event) { self.behindChanged() }
             if event == "space_change" { return self.spaceChanged() }
             if event == "front_app_switched" {
                 self.focusChanged()
@@ -77,6 +78,7 @@ final class BarApp {
             self.tellSkylandBarHeight()
         }
         skyland.onEvent = { [unowned self] event, env in
+            if ["skyland_workspace_change", "skyland_focus_change", "skyland_monitor_change"].contains(event) { self.behindChanged() }
             if event == "skyland_workspace_swipe" { self.swiped(env) }
             if event != "skyland_binding" && event != "skyland_workspace_swipe" && event != "skyland_mode_change" && event != "aerospace_mode_change" {
                 self.focusChanged()
@@ -94,6 +96,11 @@ final class BarApp {
             self.setNeedsLayout()
         }
         events.start()
+        // the glass's snapshot of what is behind, again now and then: a window that slid under
+        // the bar, a wallpaper set by a script
+        let snapshots = Timer(timeInterval: 30, repeats: true) { [unowned self] _ in self.behindChanged() }
+        snapshots.tolerance = 5
+        RunLoop.main.add(snapshots, forMode: .common)
         aliases.onChange = { [unowned self] in self.setNeedsLayout() }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [unowned self] _ in
             self.rebuildWindows()
@@ -154,6 +161,7 @@ final class BarApp {
         if outcome.barChanged {
             updateMotion()
             configureWindows()
+            behindChanged() // a theme's wallpaper comes with its colors
         }
         if outcome.eventsChanged {
             events.observeCustom(model.events)
@@ -264,6 +272,17 @@ final class BarApp {
         if value == nil { swipe = nil }
         for window in windows { window.swipe = value }
     }
+
+    /// What is behind the bar may have changed: the glass takes a new snapshot of it, after
+    /// the change is on screen (a workspace's windows, a wallpaper fading in).
+    private func behindChanged() {
+        behindWork?.cancel()
+        let work = DispatchWorkItem { NotificationCenter.default.post(name: BackdropCapture.behindChanged, object: nil) }
+        behindWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    private var behindWork: DispatchWorkItem?
 
     private func spaceChanged() {
         model.currentSpaces = Spaces.current()

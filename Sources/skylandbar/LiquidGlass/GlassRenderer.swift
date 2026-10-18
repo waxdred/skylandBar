@@ -27,6 +27,8 @@ struct GlassShape: Equatable {
 
 struct GlassSettings: Equatable {
     var engine = "auto"
+    /// the metal engine: snapshot | live (BarProps.glassCapture)
+    var capture = "snapshot"
     var spacing = 0.0
     var refraction = 14.0
     var blur = 2.0
@@ -46,6 +48,7 @@ struct GlassSettings: Equatable {
 
     init(bar: BarProps) {
         engine = bar.glassEngine
+        capture = bar.glassCapture
         spacing = bar.glassSpacing
         refraction = bar.glassRefraction
         blur = bar.glassBlur
