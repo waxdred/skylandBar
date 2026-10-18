@@ -552,6 +552,10 @@ public struct BarProps: Equatable {
     /// backdrop), system (NSGlassEffectView), metal (skylandbar's shader: refraction, rim
     /// light), backdrop (Core Animation's blur and highlights)
     public var glassEngine = "auto"
+    /// the metal engine: snapshot (a picture of what is behind, taken again when it may have
+    /// changed: a running capture turns protected videos black, Netflix, Prime Video...) or
+    /// live (a capture stream, what is behind as it moves)
+    public var glassCapture = "snapshot"
     /// the metal engine: how far the edges bend what is behind (points), its blur (points),
     /// its saturation (1: as it is)
     public var glassRefraction = 14.0
@@ -576,6 +580,7 @@ public struct BarProps: Equatable {
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
             case "glass_spacing": return Value.setNumber(&glassSpacing, value, minimum: 0)
             case "glass_engine": return Value.oneOf(&glassEngine, value, ["auto", "system", "metal", "backdrop"])
+            case "glass_capture": return Value.oneOf(&glassCapture, value, ["snapshot", "live"])
             case "glass_refraction": return Value.setNumber(&glassRefraction, value, minimum: 0)
             case "glass_blur": return Value.setNumber(&glassBlur, value, minimum: 0)
             case "glass_saturation": return Value.setNumber(&glassSaturation, value, minimum: 0)
@@ -647,7 +652,7 @@ public struct BarProps: Equatable {
             "display": display, "color": color.description, "border_color": borderColor.description, "border_width": borderWidth,
             "height": height, "y_offset": yOffset, "corner_radius": cornerRadius,
             "padding_left": paddingLeft, "padding_right": paddingRight, "glass": glass, "glass_spacing": glassSpacing,
-            "glass_engine": glassEngine, "glass_refraction": glassRefraction, "glass_blur": glassBlur, "glass_saturation": glassSaturation,
+            "glass_engine": glassEngine, "glass_capture": glassCapture, "glass_refraction": glassRefraction, "glass_blur": glassBlur, "glass_saturation": glassSaturation,
             "glass_lens_response": glassLensResponse, "glass_lens_bounce": glassLensBounce, "glass_lens_stretch": glassLensStretch, "motion": motion,
         ]
     }
