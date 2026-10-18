@@ -85,6 +85,9 @@ final class MetalGlass: GlassRenderer {
                                                   CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer), 0, &texture)
         guard let texture else { return }
         backdrop = texture
+        // the cache keeps a texture for every picture's surface until flushed: each new stream
+        // (moved, resized, woken up) brought surfaces of its own, and the old ones stayed
+        CVMetalTextureCacheFlush(textureCache, 0)
         render()
     }
 
@@ -107,8 +110,9 @@ final class MetalGlass: GlassRenderer {
             var gpuShapes = shapes.prefix(32).map { shape in
                 GPUShape(rect: SIMD4(Float(shape.rect.minX) * s, Float(shape.rect.minY) * s, Float(shape.rect.width) * s, Float(shape.rect.height) * s),
                          tint: SIMD4(Float(shape.tint.red), Float(shape.tint.green), Float(shape.tint.blue), Float(shape.tint.alpha)),
-                         radius: Float(shape.radius) * s, clear: shape.style == "clear" ? 1 : shape.style == "lens" ? 2 : 0,
-                         pad: SIMD2(Float(shape.lift), 0))
+                         radius: Float(shape.radius) * s, clear: shape.style == "clear" ? 1 : shape.style == "lens" ? 2 : shape.style == "hover" ? 3 : 0,
+                         pad: SIMD2(Float(shape.lift), 0),
+                         tail: shape.tail.map { SIMD4(Float($0.minX) * s, Float($0.minY) * s, Float($0.width) * s, Float($0.height) * s) } ?? .zero)
             }
             let origin = capture.origin(of: window, scale: scale)
             var uniforms = GPUUniforms(size: SIMD2(Float(size.width), Float(size.height)), origin: SIMD2(Float(origin.x), Float(origin.y)),
@@ -151,6 +155,7 @@ private struct GPUShape {
     var radius: Float
     var clear: Float
     var pad = SIMD2<Float>(0, 0)
+    var tail: SIMD4<Float> // a lens's drop left behind (0: none)
 }
 
 /// A view whose layer is the Metal layer, letting the mouse through to the items' view.

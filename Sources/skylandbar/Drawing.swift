@@ -192,6 +192,11 @@ struct PanelStyle: Equatable {
 final class BarView: NSView {
     var style = PanelStyle()
     var items: [PlacedItem] = []
+    /// The glass drops over items (a selection lens, a hover drop), where they are now: what
+    /// is under them is drawn through them, magnified and lit (see `drawThrough`)
+    var drops: [(rect: NSRect, lift: Double, weight: Double)] = [] {
+        didSet { if drops.map(\.rect) != oldValue.map(\.rect) || drops.map(\.lift) != oldValue.map(\.lift) { needsDisplay = true } }
+    }
     /// the size of the last drawing: a resized window draws again
     private(set) var drawnSize = NSSize.zero
 
@@ -283,6 +288,9 @@ final class BarView: NSView {
         if props.background.drawing { fill(props.background, x: item.x, width: item.length, mid: mid, row: item.height) }
         if item.kind == "bracket" { return }
         let parts = item.parts
+        let drop = dropOver(item, mid: mid)
+        if let drop { NSGraphicsContext.saveGraphicsState(); beginDrawThrough(drop) }
+        defer { if let drop { endDrawThrough(drop); NSGraphicsContext.restoreGraphicsState() } }
         if props.icon.drawing { draw(props.icon, scroll: props.scrollTexts, x: parts.icon, width: parts.iconWidth, mid: mid, row: item.height) }
         switch item.kind {
             case "graph": drawGraph(item, x: parts.middle, mid: mid)
@@ -296,6 +304,53 @@ final class BarView: NSView {
             default: break
         }
         if props.label.drawing { draw(props.label, scroll: props.scrollTexts, x: parts.label, width: parts.labelWidth, mid: mid, row: item.height) }
+    }
+
+    // MARK: through a drop of glass
+
+    /// The drop the item's content is under, and how much (1 at its middle, 0 past its ends):
+    /// a moving lens magnifies what it slides over, as Apple's tab bars do
+    private func dropOver(_ item: PlacedItem, mid: Double) -> (rect: NSRect, lift: Double, weight: Double, amount: Double)? {
+        guard item.kind != "bracket", !drops.isEmpty else { return nil }
+        let cx = item.x + item.length / 2
+        var best: (rect: NSRect, lift: Double, weight: Double, amount: Double)?
+        for drop in drops where abs(mid - Double(drop.rect.midY)) < Double(drop.rect.height) / 2 {
+            let reach = max(Double(drop.rect.width) / 2, 1)
+            let t = max(0, 1 - abs(cx - Double(drop.rect.midX)) / reach)
+            let amount = t * t * (3 - 2 * t) // smoothstep
+            if amount > 0.01, amount > best?.amount ?? 0 { best = (drop.rect, drop.lift, drop.weight, amount) }
+        }
+        return best
+    }
+
+    /// Magnified about the drop's middle (more while it moves), in a layer for the light
+    private func beginDrawThrough(_ drop: (rect: NSRect, lift: Double, weight: Double, amount: Double)) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let m = 1 + (0.10 + 0.12 * drop.lift) * drop.weight * drop.amount
+        let c = CGPoint(x: drop.rect.midX, y: drop.rect.midY)
+        context.translateBy(x: c.x, y: c.y)
+        context.scaleBy(x: m, y: m)
+        context.translateBy(x: -c.x, y: -c.y)
+        // a little shade under the glyphs: they stand off the glass
+        context.setShadow(offset: CGSize(width: 0, height: -1.0 * drop.amount), blur: 2.0 * drop.amount,
+                          color: NSColor(white: 0, alpha: 0.45 * drop.weight * drop.amount).cgColor)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+    }
+
+    /// The glyphs lit as the glass is: brighter toward the light (top left), a little darker
+    /// away from it; only where they are drawn (source atop)
+    private func endDrawThrough(_ drop: (rect: NSRect, lift: Double, weight: Double, amount: Double)) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let k = drop.weight * drop.amount
+        let colors = [NSColor(white: 1, alpha: 0.85 * k).cgColor, NSColor(white: 1, alpha: 0.15 * k).cgColor,
+                      NSColor(white: 0, alpha: 0.30 * k).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.5, 1]) {
+            context.setBlendMode(.sourceAtop)
+            let r = drop.rect.insetBy(dx: drop.rect.width * 0.22, dy: drop.rect.height * 0.12)
+            context.drawLinearGradient(gradient, start: CGPoint(x: r.minX, y: r.minY), end: CGPoint(x: r.maxX, y: r.maxY), options: [])
+        }
+        context.endTransparencyLayer()
     }
 
     /// A text from `x` (its padding_left included), its content `width` wide.
@@ -576,6 +631,16 @@ final class BarWindow {
     private var glassTargets: [GlassShape] = []
     private var glassSettings = GlassSettings()
 
+    /// A workspace swipe (skyland): the lens on a `from` item is `progress` of the way to the
+    /// `to` item, following the fingers
+    struct Swipe: Equatable {
+        var from: Set<String>
+        var to: Set<String>
+        var progress: Double
+    }
+
+    var swipe: Swipe? { didSet { if swipe != oldValue { drawGlass() } } }
+
     init(display: Int) {
         self.display = display
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 100, height: 25), styleMask: [.borderless, .nonactivatingPanel],
@@ -657,9 +722,10 @@ final class BarWindow {
             shapes.append(GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),
                                      tint: background.background.color, style: background.background.glass))
         }
-        // a lens is a lens inside other glass only; on its own it is glass
-        let bodies = shapes.filter { $0.style != "lens" }.map { $0.rect.insetBy(dx: -1, dy: -1) }
-        for index in shapes.indices where shapes[index].style == "lens" && !bodies.contains(where: { $0.contains(shapes[index].rect) }) {
+        // a lens (or a hover drop) is one inside other glass only; on its own it is glass
+        let isDrop = { (style: String) in style == "lens" || style == "hover" }
+        let bodies = shapes.filter { !isDrop($0.style) }.map { $0.rect.insetBy(dx: -1, dy: -1) }
+        for index in shapes.indices where isDrop(shapes[index].style) && !bodies.contains(where: { $0.contains(shapes[index].rect) }) {
             shapes[index].style = "regular"
         }
         // an engine that failed (the capture stopped) gives way to the backdrop, for good
@@ -683,20 +749,32 @@ final class BarWindow {
     /// The glass now: each lens where its spring has it on the way to its item (stretched by
     /// its speed); frames follow while one moves.
     private func drawGlass() {
-        lenses.response = glassSettings.lensResponse
+        lenses.response = swipe == nil ? glassSettings.lensResponse : 0.08 // a short spring: it keeps up with the fingers
+        lenses.leavesDrop = swipe == nil
         lenses.bounce = glassSettings.lensBounce
         lenses.stretch = glassSettings.lensStretch
         var shapes = glassTargets
         let indices = shapes.indices.filter { shapes[$0].style == "lens" }
+        if let swipe, let from = view.items.first(where: { swipe.from.contains($0.name) }),
+           let to = view.items.first(where: { swipe.to.contains($0.name) })
+        {
+            let dx = ((to.x + to.length / 2) - (from.x + from.length / 2)) * min(1, max(0, swipe.progress))
+            for index in indices where shapes[index].rect.minX <= from.x + from.length && shapes[index].rect.maxX >= from.x {
+                shapes[index].rect.origin.x += dx // the lens on the swiped workspace
+            }
+        }
         let targets = indices.map { Box(x: Double(shapes[$0].rect.minX), y: Double(shapes[$0].rect.minY),
                                         width: Double(shapes[$0].rect.width), height: Double(shapes[$0].rect.height)) }
-        let (rects, lifts, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)
+        let (rects, lifts, tails, moving) = lenses.step(targets, now: ProcessInfo.processInfo.systemUptime, reduceMotion: glassSettings.reduceMotion)
         for (offset, index) in indices.enumerated() {
             let rect = rects[offset]
             shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             shapes[index].lift = lifts[offset]
+            shapes[index].tail = tails[offset].map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
         }
         glass?.update(shapes, settings: glassSettings, window: panel)
+        view.drops = shapes.filter { $0.style == "lens" || $0.style == "hover" }
+            .map { ($0.rect, $0.lift, $0.style == "hover" ? 0.55 : 1.0) }
         if moving && lensTicker == nil {
             lensTicker = FrameTicker(view: panel.isVisible ? view : nil) { [weak self] in self?.drawGlass() }
         } else if !moving, let ticker = lensTicker {

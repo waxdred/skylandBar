@@ -105,6 +105,9 @@ public func skylandEvent(_ json: [String: Any]) -> [(event: String, env: [String
                                                  "APP_NAME": text("appName"), "APP_BUNDLE_ID": text("appBundleId")])]
         case "binding-triggered"?:
             return [("skyland_binding", ["MODE": text("mode"), "BINDING": text("binding")])]
+        case "workspace-swipe"?:
+            return [("skyland_workspace_swipe", ["FOCUSED_WORKSPACE": text("workspace"), "TARGET_WORKSPACE": text("targetWorkspace"),
+                                                 "PROGRESS": text("progress")])]
         default:
             return []
     }

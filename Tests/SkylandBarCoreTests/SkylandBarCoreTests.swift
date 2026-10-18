@@ -395,6 +395,9 @@ final class SkylandTests: XCTestCase {
         XCTAssertEqual(skylandEvent(["_event": "mode-changed", "mode": "resize"]).map(\.env["MODE"]), ["resize", "resize"])
         XCTAssertEqual(skylandEvent(["_event": "focused-monitor-changed", "workspace": "1", "monitorId": 2]).first?.env["MONITOR"], "2")
         XCTAssertTrue(skylandEvent(["_event": "something-new"]).isEmpty)
+        let swipe = skylandEvent(["_event": "workspace-swipe", "workspace": "2", "targetWorkspace": "3", "progress": 0.4])
+        XCTAssertEqual(swipe.first?.env, ["FOCUSED_WORKSPACE": "2", "TARGET_WORKSPACE": "3", "PROGRESS": "0.4"])
+        XCTAssertEqual(skylandEvent(["_event": "workspace-swipe", "workspace": "2", "progress": 0]).first?.env["TARGET_WORKSPACE"], "") // lifted
     }
 
     func testSubscriptions() {
@@ -958,17 +961,21 @@ final class LiquidGlassTests: XCTestCase {
 }
 
 final class LensMotionTests: XCTestCase {
-    private func run(_ motion: LensMotion, to target: Box, from start: Double, frames: Int, fps: Double = 60) -> (last: Box, maxX: Double, maxWidth: Double, settled: Int?) {
+    private func run(_ motion: LensMotion, to target: Box, from start: Double, frames: Int, fps: Double = 60)
+        -> (last: Box, maxX: Double, maxWidth: Double, settled: Int?, tails: [Box?])
+    {
         var maxX = -Double.infinity, maxWidth = 0.0, settled: Int?
         var last = target
+        var tails: [Box?] = []
         for frame in 1 ... frames {
-            let (rects, _, moving) = motion.step([target], now: start + Double(frame) / fps)
+            let (rects, _, tail, moving) = motion.step([target], now: start + Double(frame) / fps)
             last = rects[0]
+            tails.append(tail[0])
             maxX = max(maxX, last.x)
             maxWidth = max(maxWidth, last.width)
             if !moving && settled == nil { settled = frame }
         }
-        return (last, maxX, maxWidth, settled)
+        return (last, maxX, maxWidth, settled, tails)
     }
 
     func testSlide() {
@@ -983,6 +990,11 @@ final class LensMotionTests: XCTestCase {
         XCTAssertGreaterThan(slide.maxX, b.x + 1) // a little past it (bounce 0.3), then back
         XCTAssertGreaterThan(slide.maxWidth, 80) // stretched on its way: its leading end goes first
         XCTAssertLessThanOrEqual(slide.maxWidth, 60 * 1.8 + 0.5)
+        // a drop stays behind where it was, shrinks, and is gone once it rests
+        let first = slide.tails.first!!
+        XCTAssertEqual(first.x + first.width / 2, a.x + a.width / 2, accuracy: 6)
+        XCTAssertLessThan(slide.tails.compactMap { $0 }.last!.width, first.width)
+        XCTAssertNil(slide.tails.last!)
     }
 
     func testNoBounceNoStretch() {

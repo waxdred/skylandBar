@@ -7,6 +7,10 @@ import Foundation
 /// thinner, as a drop keeps its volume; and it is lifted while it moves (`lift`, 0...1: the
 /// glass magnifies more, its rim and shade grow).
 ///
+/// It also leaves a drop behind: where it was stays a tail (`tails`) that shrinks away, and the
+/// renderer melts head and tail together (a smooth union), so a neck of liquid joins them,
+/// thins as the head is pulled to its new item, and snaps.
+///
 /// `glass_lens_response` (seconds) is the spring of the whole, `glass_lens_bounce` its
 /// overshoot (0...1), `glass_lens_stretch` how unlike the ends are (0: it slides in one
 /// piece). A spring keeps its speed when the target changes on the way; a lens that appears
@@ -28,21 +32,27 @@ public final class LensMotion {
         var middle: Spring
         var height: Spring
         var lift = 0.0
+        /// the center x it goes to: a new one leaves a tail where it was
+        var goal: Double?
+        var tail: Box?
+        var tailLife = 0.0
     }
 
     private var lenses: [Lens] = []
     private var last: Double?
+    /// false: a new target leaves no drop behind (a lens the fingers drag)
+    public var leavesDrop = true
 
     public init() {}
 
     /// The rects to draw for these targets at `now` (seconds), how lifted each is, and
     /// whether they still move.
-    public func step(_ targets: [Box], now: Double, reduceMotion: Bool = false) -> (rects: [Box], lifts: [Double], moving: Bool) {
+    public func step(_ targets: [Box], now: Double, reduceMotion: Bool = false) -> (rects: [Box], lifts: [Double], tails: [Box?], moving: Bool) {
         defer { last = now }
         if reduceMotion || response <= 0 {
             lenses = targets.map { Lens(left: Spring(value: $0.x), right: Spring(value: $0.x + $0.width),
                                         middle: Spring(value: $0.y + $0.height / 2), height: Spring(value: $0.height)) }
-            return (targets, targets.map { _ in 0 }, false)
+            return (targets, targets.map { _ in 0 }, targets.map { _ in nil }, false)
         }
         // the lenses there were keep going; a new one grows from 70 % of its size
         lenses = targets.indices.map { index in
@@ -58,9 +68,18 @@ public final class LensMotion {
         var moving = false
         var rects: [Box] = []
         var lifts: [Double] = []
+        var tails: [Box?] = []
         for index in lenses.indices {
             let t = targets[index]
             var lens = lenses[index]
+            // a new item: a drop of it stays where it is, and shrinks away while the rest goes
+            let goal = t.x + t.width / 2
+            if leavesDrop, let old = lens.goal, abs(old - goal) > 0.5 {
+                let height = lens.height.value
+                lens.tail = Box(x: lens.left.value, y: lens.middle.value - height / 2, width: lens.right.value - lens.left.value, height: height)
+                lens.tailLife = 1
+            }
+            lens.goal = goal
             let goingRight = t.x + t.width / 2 > (lens.left.value + lens.right.value) / 2
             let settled = [
                 advance(&lens.left, to: t.x, response: goingRight ? trail : lead, steps: steps, h: h),
@@ -73,6 +92,20 @@ public final class LensMotion {
             lens.lift += (min(1, speed / 500) - lens.lift) * min(1, dt * 18)
             if settled && lens.lift < 0.01 { lens.lift = 0 }
             if !settled || lens.lift > 0 { moving = true }
+            // the tail: smaller and smaller, gone after about the time the head takes
+            var tail: Box?
+            if let left = lens.tail, lens.tailLife > 0 {
+                lens.tailLife -= dt / max(response * 1.4, 0.05)
+                if lens.tailLife > 0 {
+                    let s = pow(lens.tailLife, 0.8)
+                    let w = max(1, left.width * (0.35 + 0.65 * s) * s.squareRoot()), hh = max(1, left.height * (0.45 + 0.55 * s))
+                    tail = Box(x: left.x + left.width / 2 - w / 2, y: left.y + left.height / 2 - hh / 2, width: w, height: hh)
+                    moving = true
+                } else {
+                    lens.tail = nil
+                }
+            }
+            tails.append(tail)
             lenses[index] = lens
 
             // drawn: at most 1.8 times as long, from its leading end; thinner as it stretches
@@ -86,7 +119,7 @@ public final class LensMotion {
             rects.append(Box(x: left, y: lens.middle.value - height / 2, width: width, height: height))
             lifts.append(lens.lift)
         }
-        return (rects, lifts, moving)
+        return (rects, lifts, tails, moving)
     }
 
     /// One spring toward `goal`; true once it is there at rest (then snapped onto it).
