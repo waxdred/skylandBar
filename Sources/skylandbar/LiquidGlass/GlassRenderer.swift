@@ -19,6 +19,8 @@ struct GlassShape: Equatable {
     var style: String
     /// a moving lens, lifted (0...1): it magnifies more, its rim and shade grow
     var lift = 0.0
+    /// a lens: the drop it leaves behind while it moves, melted into it
+    var tail: NSRect?
 }
 
 struct GlassSettings: Equatable {

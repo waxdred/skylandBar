@@ -77,7 +77,8 @@ final class BarApp {
             self.tellSkylandBarHeight()
         }
         skyland.onEvent = { [unowned self] event, env in
-            if event != "skyland_binding" && event != "skyland_mode_change" && event != "aerospace_mode_change" {
+            if event == "skyland_workspace_swipe" { self.swiped(env) }
+            if event != "skyland_binding" && event != "skyland_workspace_swipe" && event != "skyland_mode_change" && event != "aerospace_mode_change" {
                 self.focusChanged()
                 if event != "aerospace_workspace_change" { self.askSkyland() } // sent with skyland_workspace_change
             }
@@ -231,6 +232,8 @@ final class BarApp {
             if let workspaces, let windows, self.model.setWorkspaces(SkylandData.workspaces(workspaces, windows: windows)) {
                 self.startFrames()
             }
+            // a swipe that switched: its lens goes on from where the fingers left it
+            if let swipe = self.swipe, self.model.workspaces.contains(where: { $0.focused && $0.name == swipe.to }) { self.setSwipe(nil) }
             if wantsTitle { self.model.setFocusedWindow(focused.flatMap(SkylandData.focusedWindow)) }
             self.setNeedsLayout()
             if self.skylandAskAgain {
@@ -238,6 +241,28 @@ final class BarApp {
                 self.askSkyland()
             }
         }
+    }
+
+    // MARK: workspace swipe
+
+    /// skyland's swipe in progress: the workspace items' lens goes with the fingers
+    private var swipe: (from: String, to: String)?
+
+    private func swiped(_ env: [String: String]) {
+        let from = env["FOCUSED_WORKSPACE"] ?? "", to = env["TARGET_WORKSPACE"] ?? ""
+        // fingers lifted: a switch clears it once skyland's new focus is in (askSkyland), else now
+        if to.isEmpty { return setSwipe(nil) }
+        swipe = (from, to)
+        setSwipe(BarWindow.Swipe(from: workspaceItems(from), to: workspaceItems(to), progress: Double(env["PROGRESS"] ?? "") ?? 0))
+    }
+
+    private func workspaceItems(_ workspace: String) -> Set<String> {
+        Set(model.items.filter { $0.kind == "workspace" && $0.workspace == workspace }.map(\.name))
+    }
+
+    private func setSwipe(_ value: BarWindow.Swipe?) {
+        if value == nil { swipe = nil }
+        for window in windows { window.swipe = value }
     }
 
     private func spaceChanged() {

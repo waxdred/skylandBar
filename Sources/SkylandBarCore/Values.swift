@@ -146,8 +146,9 @@ enum Value {
             case "off", "no", "false": target = "off"
             case "clear": target = "clear"
             case "lens": target = "lens" // a selection inside glass: see GlassShader
+            case "hover": target = "hover" // the same drop, lighter, under the mouse
             case "toggle": target = target == "off" ? "regular" : "off"
-            default: return "'\(text)' is not on, off, regular, clear or lens"
+            default: return "'\(text)' is not on, off, regular, clear, lens or hover"
         }
         return nil
     }
