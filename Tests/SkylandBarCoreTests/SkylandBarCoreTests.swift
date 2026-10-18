@@ -338,7 +338,10 @@ final class AnimationTests: XCTestCase {
             XCTAssertGreaterThan(curve.value(0.5), 0, "\(curve)")
             XCTAssertLessThan(curve.value(0.5), 1, "\(curve)")
         }
-        XCTAssertEqual(ARGB.mix(ARGB(0xFF00_0000), ARGB(0x00FF_FFFF), 0.5).value, 0x8080_8080)
+        // premultiplied: a fade to transparent keeps its hue, no darkening on the way
+        XCTAssertEqual(ARGB.mix(ARGB(0xFF00_0000), ARGB(0x00FF_FFFF), 0.5).value, 0x8000_0000)
+        XCTAssertEqual(ARGB.mix(ARGB(0x33FF_8800), ARGB(0x0000_0000), 0.5).value, 0x1AFF_8800)
+        XCTAssertEqual(ARGB.mix(ARGB(0xFFFF_FFFF), ARGB(0xFF00_0000), 0.5).value, 0xFF80_8080)
     }
 
     func testAnimatedSet() {

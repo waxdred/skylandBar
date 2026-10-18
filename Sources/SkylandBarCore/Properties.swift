@@ -548,8 +548,8 @@ public struct BarProps: Equatable {
     /// how close glass backgrounds get before they merge into one shape
     /// (NSGlassEffectContainerView's spacing); 0: they never merge
     public var glassSpacing = 0.0
-    /// who draws the glass: auto (system on macOS 26, else metal with Screen Recording, else
-    /// backdrop), system (NSGlassEffectView), metal (skylandbar's shader: refraction, rim
+    /// who draws the glass: auto (native on macOS 26, else metal with Screen Recording, else
+    /// backdrop), native (Apple's Liquid Glass through SwiftUI), system (NSGlassEffectView), metal (skylandbar's shader: refraction, rim
     /// light), backdrop (Core Animation's blur and highlights)
     public var glassEngine = "auto"
     /// the metal engine: how far the edges bend what is behind (points), its blur (points),
@@ -575,7 +575,7 @@ public struct BarProps: Equatable {
             case "border_color": return Value.setColor(&borderColor, value, part: rest)
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
             case "glass_spacing": return Value.setNumber(&glassSpacing, value, minimum: 0)
-            case "glass_engine": return Value.oneOf(&glassEngine, value, ["auto", "system", "metal", "backdrop"])
+            case "glass_engine": return Value.oneOf(&glassEngine, value, ["auto", "native", "system", "metal", "backdrop"])
             case "glass_refraction": return Value.setNumber(&glassRefraction, value, minimum: 0)
             case "glass_blur": return Value.setNumber(&glassBlur, value, minimum: 0)
             case "glass_saturation": return Value.setNumber(&glassSaturation, value, minimum: 0)

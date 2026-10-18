@@ -1,7 +1,9 @@
 import AppKit
 import SkylandBarCore
 
-// skylandbar's Liquid Glass: the glass under a window's items, drawn by one of three engines.
+// skylandbar's Liquid Glass: the glass under a window's items, drawn by one of four engines.
+//   native    Apple's Liquid Glass through SwiftUI (glassEffect, GlassEffectContainer), its
+//             lenses animated by SwiftUI (macOS 26, built with its SDK; NativeGlass.swift)
 //   system    NSGlassEffectView in an NSGlassEffectContainerView (macOS 26)
 //   metal     what is behind the window (ScreenCaptureKit) through a shader: refraction at
 //             the edges, chromatic aberration, a light blur, saturation, rim light, sheen,
@@ -34,6 +36,8 @@ struct GlassSettings: Equatable {
     var lensStretch = 1.0
     /// the Reduce Motion setting: lenses do not slide
     var reduceMotion = false
+    /// a lens follows the fingers (a workspace swipe): engines that animate lenses keep close
+    var following = false
     /// screen (AppKit) area to see behind even with no glass yet: a glass notch, closed, keeps
     /// what is behind its open size ready, so it has glass from its first frame
     var captureArea: NSRect?
@@ -58,6 +62,13 @@ protocol GlassRenderer: AnyObject {
     /// it cannot go on (metal: the capture stopped): the window takes another engine
     var failed: Bool { get }
     func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow)
+    /// true: given the lenses' targets, it animates them itself (native); false: the bar
+    /// gives it each frame of LensMotion
+    var animatesLenses: Bool { get }
+}
+
+extension GlassRenderer {
+    var animatesLenses: Bool { false }
 }
 
 enum GlassEngine {
@@ -70,6 +81,7 @@ enum GlassEngine {
     static func resolve(_ setting: String) -> String {
         var engine: String
         switch setting {
+            case "native": engine = NativeGlassSupport.available ? "native" : resolve("auto")
             case "system": engine = systemAvailable ? "system" : resolve("auto")
             case "backdrop": engine = "backdrop"
             case "metal":
@@ -78,7 +90,7 @@ enum GlassEngine {
                     asked = true
                     CGRequestScreenCaptureAccess()
                 }
-            default: engine = systemAvailable ? "system" : MetalGlass.isAvailable ? "metal" : "backdrop"
+            default: engine = NativeGlassSupport.available ? "native" : systemAvailable ? "system" : MetalGlass.isAvailable ? "metal" : "backdrop"
         }
         if said.insert("\(setting)>\(engine)").inserted {
             let why = engine == "backdrop" && !systemAvailable
@@ -90,6 +102,7 @@ enum GlassEngine {
 
     static func make(_ engine: String) -> GlassRenderer {
         switch engine {
+            case "native": return NativeGlassSupport.make() ?? SystemGlass()
             case "system": return SystemGlass()
             case "metal": return MetalGlass() ?? BackdropGlass()
             default: return BackdropGlass()
