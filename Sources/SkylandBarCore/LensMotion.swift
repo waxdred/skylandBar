@@ -74,7 +74,9 @@ public final class LensMotion {
             var lens = lenses[index]
             // a new item: a drop of it stays where it is, and shrinks away while the rest goes
             let goal = t.x + t.width / 2
-            if leavesDrop, let old = lens.goal, abs(old - goal) > 0.5 {
+            // a drop only when it leaves its item (more than half its width): a lens nudged into
+            // place (a swipe let go next to it) left a drop under itself, a second ring
+            if leavesDrop, let old = lens.goal, abs(old - goal) > t.width * 0.5 {
                 let height = lens.height.value
                 lens.tail = Box(x: lens.left.value, y: lens.middle.value - height / 2, width: lens.right.value - lens.left.value, height: height)
                 lens.tailLife = 1

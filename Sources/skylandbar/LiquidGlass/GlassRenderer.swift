@@ -147,22 +147,30 @@ final class SystemGlass: GlassRenderer {
             dropShapes.append(shape)
             if let tail = shape.tail, tail.width > 0 { // its drop left behind, the same glass
                 var drop = shape
-                drop.rect = tail
-                drop.radius = min(shape.radius, Double(min(tail.width, tail.height)) / 2)
+                // round as it shrinks: a drop (the shader's narrowed into a tall pill on its own);
+                // gone once small, not a ring left by the item
+                let side = min(tail.width, tail.height)
+                guard side > shape.rect.height * 0.2 else { continue } // small enough to go without a pop
+                drop.rect = NSRect(x: tail.midX - side / 2, y: tail.midY - side / 2, width: side, height: side)
+                drop.radius = Double(side) / 2
                 drop.tail = nil
+                drop.style = "tail" // no rim: Apple's glass melts it into the lens, a rim would not
                 dropShapes.append(drop)
+                if let neck = neck(from: tail, to: shape) { dropShapes.append(neck) }
             }
         }
         Glass.setSpacing(bodies.holder, settings.spacing)
-        Glass.setSpacing(drops.holder, 14) // a lens and its drop melt while near
+        Glass.setSpacing(drops.holder, 12) // the neck melts into the drop and the lens: thick where it joins them
         place(groupShapes, in: bodies.holder, views: &bodyViews)
         // Apple's tint is dense: a drop at half its tint keeps what is behind showing through it
-        place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32(d.tint.alpha * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
-              in: drops.holder, views: &dropViews)
+        // half the tint (Apple's is dense), its strength in steps: the item's color fades in over
+        // its animation, and every new tint rebuilds the glass
+        place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32((d.tint.alpha * 4).rounded() / 4 * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
+              in: drops.holder, views: &dropViews, keep: true)
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
         // the double rims, over all the glass
-        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.map { ($0, 1.5 + 0.5 * $0.lift) }
+        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.filter { $0.style == "lens" || $0.style == "hover" }.map { ($0, 1.5 + 0.5 * $0.lift) }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()
@@ -180,8 +188,39 @@ final class SystemGlass: GlassRenderer {
         }
     }
 
-    private func place(_ shapes: [GlassShape], in holder: NSView, views: inout [NSView]) {
-        while views.count > shapes.count { views.removeLast().removeFromSuperview() }
+    /// The neck of liquid from a lens's drop to the lens, as skylandbar's shader drew it: one
+    /// thin tube of glass between their middles, which the container melts into both, so it
+    /// is thick where it joins them and thin in between; it thins as the drop shrinks and is
+    /// gone before the drop. One shape: no beads, each with its own rim and color split.
+    private func neck(from tail: NSRect, to lens: GlassShape) -> GlassShape? {
+        let head = lens.rect, headR = Double(head.height) / 2
+        let life = min(1, max(0, Double(tail.height / max(head.height, 1))))
+        let neckLife = min(1, max(0, (life - 0.6) / 0.35)), smooth = neckLife * neckLife * (3 - 2 * neckLife)
+        let left = min(tail.midX, head.midX), right = max(tail.midX, head.midX)
+        // a neck only while the lens is near its drop: a long jump stretched it into a wire
+        // across the bar; it thins as they part and snaps at 3 lens heights
+        let reach = 1 - Double(right - left) / (6 * headR)
+        guard right - left > headR, reach > 0 else { return nil }
+        let thickness = 2 * headR * 0.22 * smooth * min(1, reach * 2)
+        guard thickness > 1.5 else { return nil }
+        let y = (tail.midY + head.midY) / 2
+        var neck = lens
+        neck.rect = NSRect(x: left, y: y - thickness / 2, width: right - left, height: thickness)
+        neck.radius = thickness / 2
+        neck.style = "neck"
+        neck.tail = nil
+        return neck
+    }
+
+    /// `keep`: views no shape needs now are hidden, not removed: a drop that comes and goes
+    /// every lens move took a new glass view, which showed Apple's frosted look for a frame
+    /// before skylandbar's (a flash where the lens left)
+    private func place(_ shapes: [GlassShape], in holder: NSView, views: inout [NSView], keep: Bool = false) {
+        if keep {
+            for (index, view) in views.enumerated() { view.isHidden = index >= shapes.count }
+        } else {
+            while views.count > shapes.count { views.removeLast().removeFromSuperview() }
+        }
         while views.count < shapes.count {
             let glass = Glass.makeView()
             holder.addSubview(glass)
@@ -190,6 +229,9 @@ final class SystemGlass: GlassRenderer {
         for (glass, shape) in zip(views, shapes) {
             glass.frame = shape.rect
             Glass.update(glass, style: shape.style, tint: shape.tint, cornerRadius: shape.radius)
+            // a new tint rebuilds Apple's glass filter at the next layout: now, so skylandbar's
+            // values (GlassLook, right after) go on the new one; else a frame of the frosted look
+            glass.layoutSubtreeIfNeeded()
         }
     }
 }

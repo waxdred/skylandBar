@@ -755,12 +755,24 @@ final class BarWindow {
         lenses.stretch = glassSettings.lensStretch
         var shapes = glassTargets
         let indices = shapes.indices.filter { shapes[$0].style == "lens" }
+        // a swipe: the lens goes with the fingers, pulled out of its item like a drop of liquid
+        // (stretched along the way, thinner), and leaves a drop there that shrinks as it goes
+        var swipeDrop: (index: Int, rect: NSRect)?
         if let swipe, let from = view.items.first(where: { swipe.from.contains($0.name) }),
            let to = view.items.first(where: { swipe.to.contains($0.name) })
         {
-            let dx = ((to.x + to.length / 2) - (from.x + from.length / 2)) * min(1, max(0, swipe.progress))
+            let p = min(1, max(0, swipe.progress))
+            let dx = ((to.x + to.length / 2) - (from.x + from.length / 2)) * p
             for index in indices where shapes[index].rect.minX <= from.x + from.length && shapes[index].rect.maxX >= from.x {
-                shapes[index].rect.origin.x += dx // the lens on the swiped workspace
+                let home = shapes[index].rect
+                let pull = sin(Double.pi * p) // 0 at both ends, most halfway
+                let width = home.width * (1 + 0.6 * pull), height = home.height * (1 - 0.12 * pull)
+                shapes[index].rect = NSRect(x: home.midX + dx - width / 2, y: home.midY - height / 2, width: width, height: height)
+                let left = 1 - min(1, p * 1.6) // the drop: gone before the lens arrives
+                if left > 0.05 {
+                    swipeDrop = (index, NSRect(x: home.midX - home.width * left / 2, y: home.midY - home.height * left / 2,
+                                               width: home.width * left, height: home.height * left))
+                }
             }
         }
         if glass?.animatesLenses == true { // native: the targets, its own springs; no drawing through
@@ -778,11 +790,14 @@ final class BarWindow {
         for (offset, index) in indices.enumerated() {
             let rect = rects[offset]
             shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-            shapes[index].lift = lifts[offset]
+            shapes[index].lift = swipe == nil ? lifts[offset] : 0 // with the fingers: as it is, not lifted (it darkened)
             shapes[index].tail = tails[offset].map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+            if let swipeDrop, swipeDrop.index == index { shapes[index].tail = swipeDrop.rect }
         }
         glass?.update(shapes, settings: glassSettings, window: panel)
-        view.drops = shapes.filter { $0.style == "lens" || $0.style == "hover" }
+        // the glyphs drawn magnified through a drop: the metal engine's; Apple's glass magnifies
+        // what is behind itself, and with it they looked dimmed under a moving lens
+        view.drops = glassEngine != "metal" ? [] : shapes.filter { $0.style == "lens" || $0.style == "hover" }
             .map { ($0.rect, $0.lift, $0.style == "hover" ? 0.55 : 1.0) }
         if moving && lensTicker == nil {
             lensTicker = FrameTicker(view: panel.isVisible ? view : nil) { [weak self] in self?.drawGlass() }

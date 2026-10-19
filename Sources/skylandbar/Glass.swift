@@ -45,9 +45,13 @@ enum Glass {
     /// `style`: regular | clear; `tint`: the background's color.
     static func update(_ view: NSView, style: String, tint: ARGB, cornerRadius: Double) {
         if let effectView, view.isKind(of: effectView) {
-            view.setValue(cornerRadius, forKey: "cornerRadius")
-            view.setValue(tint.alpha > 0 ? Fonts.color(tint) : nil, forKey: "tintColor")
-            view.setValue(style == "clear" ? 1 : 0, forKey: "style") // NSGlassEffectView.Style: regular 0, clear 1
+            // only what changed: setting the tint (even the same) rebuilds Apple's glass filter,
+            // skylandbar's values (GlassLook) gone for a frame: a lens flashed as it moved
+            if (view.value(forKey: "cornerRadius") as? Double) != cornerRadius { view.setValue(cornerRadius, forKey: "cornerRadius") }
+            let color: NSColor? = tint.alpha > 0 ? Fonts.color(tint) : nil
+            if (view.value(forKey: "tintColor") as? NSColor) != color { view.setValue(color, forKey: "tintColor") }
+            let glassStyle = style == "clear" ? 1 : 0 // NSGlassEffectView.Style: regular 0, clear 1
+            if (view.value(forKey: "style") as? Int) != glassStyle { view.setValue(glassStyle, forKey: "style") }
             return
         }
         view.layer?.cornerRadius = cornerRadius
@@ -91,10 +95,10 @@ enum GlassLook {
                 "inputFaceColorMatrixWhite": 1.32 + 0.1 * lift, "inputFaceColorMatrixBlack": 0.1,
                 // a double rim, brighter than the groups': it stands out of them
                 "inputKeyFillHighlightAmount": 0.8 + 0.3 * lift,
-                "inputRingShadowOpacity": 0.4, "inputRingShadowOffset": 2, "inputRingShadowStrokeWidth": 1.2,
+                // light shades: the drop it leaves shares them, and a dark ring stayed where it was
+                "inputRingShadowOpacity": 0.15, "inputRingShadowOffset": 2, "inputRingShadowStrokeWidth": 1,
                 "inputRingShadowBlurRadius": 1.5,
-                "inputShadowOpacity": 0.35 + 0.15 * lift, "inputShadowAmount": 4 + 3 * lift, "inputShadowHeight": 4 + 3 * lift,
-                "inputShadowBlurRadius": 5 + 3 * lift,
+                "inputShadowOpacity": 0.12, "inputShadowAmount": 3, "inputShadowHeight": 3, "inputShadowBlurRadius": 5, // not with the speed: it darkened the lens
             ]
         } else {
             let band = min(2.3 * settings.refraction, max(2, height / 4))
