@@ -42,10 +42,12 @@ gap (a 28 pt item in a 36 pt capsule: a capsule too).
 | `metal` | skylandbar's shader over what is behind (ScreenCaptureKit, without its own windows): lens refraction at the edges, a little color split, blur, saturation, rim light, sheen, inner shadow; shapes closer than `glass_spacing` melt | Screen Recording |
 | `backdrop` | Core Animation's blur with a tint, sheen, rim light and shadow; no refraction | nothing |
 
-`glass_engine = "auto"` (default) takes the first this Mac can do. The bar prints the one it took
-at start (`skylandbar: glass: metal`; in `~/Library/Logs/skylandbar.log` as a service). To get
-`metal`: allow skylandbar in System Settings > Privacy & Security > Screen Recording, then
-restart it (see [install.md](install.md#permissions) about the launch agent).
+`glass_engine = "auto"` (default) takes `system` on macOS 26 and later, `backdrop` before. It never
+takes `metal`: its screen capture turns protected videos (Netflix, Prime Video) black and stays
+still behind what scrolls. The bar prints the engine it took at start (`skylandbar: glass:
+system`; in `~/Library/Logs/skylandbar.log` as a service). For `metal` anyway, set
+`glass_engine = "metal"`, allow skylandbar in System Settings > Privacy & Security > Screen
+Recording, then restart it (see [install.md](install.md#permissions) about the launch agent).
 
 Tuning (`[bar]`, or the settings window's Glass section):
 
