@@ -45,9 +45,13 @@ enum Glass {
     /// `style`: regular | clear; `tint`: the background's color.
     static func update(_ view: NSView, style: String, tint: ARGB, cornerRadius: Double) {
         if let effectView, view.isKind(of: effectView) {
-            view.setValue(cornerRadius, forKey: "cornerRadius")
-            view.setValue(tint.alpha > 0 ? Fonts.color(tint) : nil, forKey: "tintColor")
-            view.setValue(style == "clear" ? 1 : 0, forKey: "style") // NSGlassEffectView.Style: regular 0, clear 1
+            // only what changed: setting the tint (even the same) rebuilds Apple's glass filter,
+            // skylandbar's values (GlassLook) gone for a frame: a lens flashed as it moved
+            if (view.value(forKey: "cornerRadius") as? Double) != cornerRadius { view.setValue(cornerRadius, forKey: "cornerRadius") }
+            let color: NSColor? = tint.alpha > 0 ? Fonts.color(tint) : nil
+            if (view.value(forKey: "tintColor") as? NSColor) != color { view.setValue(color, forKey: "tintColor") }
+            let glassStyle = style == "clear" ? 1 : 0 // NSGlassEffectView.Style: regular 0, clear 1
+            if (view.value(forKey: "style") as? Int) != glassStyle { view.setValue(glassStyle, forKey: "style") }
             return
         }
         view.layer?.cornerRadius = cornerRadius

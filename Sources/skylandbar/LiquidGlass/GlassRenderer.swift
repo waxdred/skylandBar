@@ -151,18 +151,19 @@ final class SystemGlass: GlassRenderer {
                 drop.radius = min(shape.radius, Double(min(tail.width, tail.height)) / 2)
                 drop.tail = nil
                 dropShapes.append(drop)
+                neckBeads(from: tail, to: shape).forEach { dropShapes.append($0) }
             }
         }
         Glass.setSpacing(bodies.holder, settings.spacing)
-        Glass.setSpacing(drops.holder, 14) // a lens and its drop melt while near
+        Glass.setSpacing(drops.holder, 6) // the neck's beads melt into one thread (more: the container swells it)
         place(groupShapes, in: bodies.holder, views: &bodyViews)
         // Apple's tint is dense: a drop at half its tint keeps what is behind showing through it
         place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32(d.tint.alpha * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
-              in: drops.holder, views: &dropViews)
+              in: drops.holder, views: &dropViews, keep: true)
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
         // the double rims, over all the glass
-        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.map { ($0, 1.5 + 0.5 * $0.lift) }
+        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.filter { $0.style != "neck" }.map { ($0, 1.5 + 0.5 * $0.lift) }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()
@@ -180,8 +181,44 @@ final class SystemGlass: GlassRenderer {
         }
     }
 
-    private func place(_ shapes: [GlassShape], in holder: NSView, views: inout [NSView]) {
-        while views.count > shapes.count { views.removeLast().removeFromSuperview() }
+    /// The neck of liquid from a lens's drop to the lens, as skylandbar's shader drew it: thick
+    /// at both ends, pinched in the middle, thinning as the drop shrinks, snapped once it is
+    /// small. Beads of glass along it, close enough for the container to melt them into one.
+    private func neckBeads(from tail: NSRect, to lens: GlassShape) -> [GlassShape] {
+        let head = lens.rect, headR = Double(head.height) / 2
+        let life = min(1, max(0, Double(tail.height / max(head.height, 1))))
+        // snaps sooner than the shader's: Apple's melt holds it longer
+        let neckLife = min(1, max(0, (life - 0.62) / 0.33)), smooth = neckLife * neckLife * (3 - 2 * neckLife)
+        guard smooth > 0 else { return [] }
+        let a = CGPoint(x: tail.midX, y: tail.midY), b = CGPoint(x: head.midX, y: head.midY)
+        let length = hypot(b.x - a.x, b.y - a.y)
+        guard length > headR else { return [] }
+        let pinch = 0.05 + 0.13 * smooth, count = max(2, Int(length / 5))
+        var beads: [GlassShape] = []
+        for i in 1 ..< count {
+            let t = Double(i) / Double(count)
+            let r = headR * (pinch + (life * 0.8 - pinch) * pow(1 - t, 4) + (0.75 - pinch) * pow(t, 4))
+            guard r > 2.5 else { continue } // thinner: specks of split color, not a thread
+            let c = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+            var bead = lens
+            bead.rect = NSRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
+            bead.radius = r
+            bead.style = "neck"
+            bead.tail = nil
+            beads.append(bead)
+        }
+        return beads
+    }
+
+    /// `keep`: views no shape needs now are hidden, not removed: a drop that comes and goes
+    /// every lens move took a new glass view, which showed Apple's frosted look for a frame
+    /// before skylandbar's (a flash where the lens left)
+    private func place(_ shapes: [GlassShape], in holder: NSView, views: inout [NSView], keep: Bool = false) {
+        if keep {
+            for (index, view) in views.enumerated() { view.isHidden = index >= shapes.count }
+        } else {
+            while views.count > shapes.count { views.removeLast().removeFromSuperview() }
+        }
         while views.count < shapes.count {
             let glass = Glass.makeView()
             holder.addSubview(glass)
