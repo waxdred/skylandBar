@@ -147,15 +147,17 @@ final class SystemGlass: GlassRenderer {
             dropShapes.append(shape)
             if let tail = shape.tail, tail.width > 0 { // its drop left behind, the same glass
                 var drop = shape
-                drop.rect = tail
-                drop.radius = min(shape.radius, Double(min(tail.width, tail.height)) / 2)
+                // round as it shrinks: a drop (the shader's narrowed into a tall pill on its own)
+                let side = min(tail.width, tail.height)
+                drop.rect = NSRect(x: tail.midX - side / 2, y: tail.midY - side / 2, width: side, height: side)
+                drop.radius = Double(side) / 2
                 drop.tail = nil
                 dropShapes.append(drop)
-                neckBeads(from: tail, to: shape).forEach { dropShapes.append($0) }
+                if let neck = neck(from: tail, to: shape) { dropShapes.append(neck) }
             }
         }
         Glass.setSpacing(bodies.holder, settings.spacing)
-        Glass.setSpacing(drops.holder, 6) // the neck's beads melt into one thread (more: the container swells it)
+        Glass.setSpacing(drops.holder, 12) // the neck melts into the drop and the lens: thick where it joins them
         place(groupShapes, in: bodies.holder, views: &bodyViews)
         // Apple's tint is dense: a drop at half its tint keeps what is behind showing through it
         place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32(d.tint.alpha * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
@@ -181,33 +183,25 @@ final class SystemGlass: GlassRenderer {
         }
     }
 
-    /// The neck of liquid from a lens's drop to the lens, as skylandbar's shader drew it: thick
-    /// at both ends, pinched in the middle, thinning as the drop shrinks, snapped once it is
-    /// small. Beads of glass along it, close enough for the container to melt them into one.
-    private func neckBeads(from tail: NSRect, to lens: GlassShape) -> [GlassShape] {
+    /// The neck of liquid from a lens's drop to the lens, as skylandbar's shader drew it: one
+    /// thin tube of glass between their middles, which the container melts into both, so it
+    /// is thick where it joins them and thin in between; it thins as the drop shrinks and is
+    /// gone before the drop. One shape: no beads, each with its own rim and color split.
+    private func neck(from tail: NSRect, to lens: GlassShape) -> GlassShape? {
         let head = lens.rect, headR = Double(head.height) / 2
         let life = min(1, max(0, Double(tail.height / max(head.height, 1))))
-        // snaps sooner than the shader's: Apple's melt holds it longer
-        let neckLife = min(1, max(0, (life - 0.62) / 0.33)), smooth = neckLife * neckLife * (3 - 2 * neckLife)
-        guard smooth > 0 else { return [] }
-        let a = CGPoint(x: tail.midX, y: tail.midY), b = CGPoint(x: head.midX, y: head.midY)
-        let length = hypot(b.x - a.x, b.y - a.y)
-        guard length > headR else { return [] }
-        let pinch = 0.05 + 0.13 * smooth, count = max(2, Int(length / 5))
-        var beads: [GlassShape] = []
-        for i in 1 ..< count {
-            let t = Double(i) / Double(count)
-            let r = headR * (pinch + (life * 0.8 - pinch) * pow(1 - t, 4) + (0.75 - pinch) * pow(t, 4))
-            guard r > 2.5 else { continue } // thinner: specks of split color, not a thread
-            let c = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
-            var bead = lens
-            bead.rect = NSRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
-            bead.radius = r
-            bead.style = "neck"
-            bead.tail = nil
-            beads.append(bead)
-        }
-        return beads
+        let neckLife = min(1, max(0, (life - 0.6) / 0.35)), smooth = neckLife * neckLife * (3 - 2 * neckLife)
+        let thickness = 2 * headR * 0.22 * smooth
+        guard thickness > 1.5 else { return nil }
+        let left = min(tail.midX, head.midX), right = max(tail.midX, head.midX)
+        guard right - left > headR else { return nil }
+        let y = (tail.midY + head.midY) / 2
+        var neck = lens
+        neck.rect = NSRect(x: left, y: y - thickness / 2, width: right - left, height: thickness)
+        neck.radius = thickness / 2
+        neck.style = "neck"
+        neck.tail = nil
+        return neck
     }
 
     /// `keep`: views no shape needs now are hidden, not removed: a drop that comes and goes
