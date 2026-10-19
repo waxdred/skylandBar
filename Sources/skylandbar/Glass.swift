@@ -121,24 +121,40 @@ enum GlassLook {
         ]) { mine, _ in mine }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for backdrop in backdrops(root) {
+        var found: [(layer: CALayer, filter: NSObject)] = []
+        backdrops(root, into: &found)
+        for (backdrop, filter) in found {
+            // set already on this filter: nothing to read again (each frame of an animation
+            // read every value of every backdrop, the bar's busiest work while switching)
+            if let last = applied.object(forKey: backdrop), last.filter === filter, last.values == values { continue }
             if (backdrop.value(forKey: "scale") as? Double) != 1 { backdrop.setValue(1, forKey: "scale") } // Apple's: half resolution
             for (key, value) in values where (backdrop.value(forKeyPath: "filters.glassBackground.\(key)") as? Double) != value {
                 backdrop.setValue(value, forKeyPath: "filters.glassBackground.\(key)")
             }
+            // the filter as it is now: a new one (a new tint rebuilds it) is set again
+            if let now = glassFilter(of: backdrop) { applied.setObject(Applied(filter: now, values: values), forKey: backdrop) }
         }
         CATransaction.commit()
     }
 
-    private static func backdrops(_ layer: CALayer) -> [CALayer] {
-        var found: [CALayer] = []
-        if NSStringFromClass(type(of: layer)) == "CABackdropLayer",
-           (layer.filters as? [NSObject])?.contains(where: { ($0.value(forKey: "name") as? String) == "glassBackground" }) == true
-        {
-            found.append(layer)
-        }
-        for sublayer in layer.sublayers ?? [] { found += backdrops(sublayer) }
-        return found
+    private final class Applied {
+        let filter: NSObject
+        let values: [String: Double]
+        init(filter: NSObject, values: [String: Double]) { self.filter = filter; self.values = values }
+    }
+
+    /// The values last set on each backdrop, with the filter they went on.
+    private static let applied = NSMapTable<CALayer, Applied>.weakToStrongObjects()
+    private static let backdropClass: AnyClass? = NSClassFromString("CABackdropLayer")
+
+    private static func glassFilter(of layer: CALayer) -> NSObject? {
+        (layer.filters as? [NSObject])?.first { ($0.value(forKey: "name") as? String) == "glassBackground" }
+    }
+
+    /// Class checked without a class name string per layer (the whole tree, several times a frame).
+    private static func backdrops(_ layer: CALayer, into found: inout [(layer: CALayer, filter: NSObject)]) {
+        if let backdropClass, layer.isKind(of: backdropClass), let filter = glassFilter(of: layer) { found.append((layer, filter)) }
+        for sublayer in layer.sublayers ?? [] { backdrops(sublayer, into: &found) }
     }
 }
 
