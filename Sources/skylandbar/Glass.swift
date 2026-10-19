@@ -166,13 +166,19 @@ final class GlassRim: CALayer {
     override init(layer: Any) { super.init(layer: layer) }
     required init?(coder: NSCoder) { nil }
 
-    /// `strength`: 1 for a group, more for a lens.
-    func set(_ rect: NSRect, radius: Double, strength: Double) {
+    /// `strength`: 1 for a group, more for a lens. Shapes that overlap (the menu bar's drop and
+    /// row) get one rim around them all: their glass is one.
+    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double) {
+        let rect = shapes.map(\.rect).reduce(shapes[0].rect) { $0.union($1) }
         frame = rect
         let bounds = CGRect(origin: .zero, size: rect.size)
         let path = { (inset: CGFloat) -> CGPath in
-            let r = bounds.insetBy(dx: inset, dy: inset), corner = max(0, CGFloat(radius) - inset)
-            return CGPath(roundedRect: r, cornerWidth: min(corner, r.height / 2), cornerHeight: min(corner, r.height / 2), transform: nil)
+            let joined = shapes.map { shape -> CGPath in
+                let r = shape.rect.offsetBy(dx: -rect.minX, dy: -rect.minY).insetBy(dx: inset, dy: inset)
+                let corner = min(max(0, CGFloat(shape.radius) - inset), r.height / 2, r.width / 2)
+                return CGPath(roundedRect: r, cornerWidth: corner, cornerHeight: corner, transform: nil)
+            }.reduce(nil as CGPath?) { $0?.union($1) ?? $1 }!
+            return shapes.count > 1 ? Self.rounded(joined, CGFloat(Self.fillet)) : joined
         }
         outer.frame = bounds; outerMask.frame = bounds
         inner.frame = bounds; innerMask.frame = bounds
@@ -185,6 +191,18 @@ final class GlassRim: CALayer {
         outer.locations = [0, 0.55, 1]
         inner.colors = [white(0.3), white(0.04), white(0)]
         inner.locations = [0, 0.5, 1]
+    }
+}
+
+extension GlassRim {
+    /// the inner corners of joined shapes (the menu bar's L): rounded this much
+    static let fillet = 10.0
+
+    /// `path` with its inner corners rounded by `radius` (a closing: grown by it, then shrunk
+    /// back), its outer ones as they were.
+    static func rounded(_ path: CGPath, _ radius: CGFloat) -> CGPath {
+        let grown = path.union(path.copy(strokingWithWidth: 2 * radius, lineCap: .round, lineJoin: .round, miterLimit: 1))
+        return grown.subtracting(grown.copy(strokingWithWidth: 2 * radius, lineCap: .round, lineJoin: .round, miterLimit: 1))
     }
 }
 

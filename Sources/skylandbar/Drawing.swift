@@ -641,6 +641,9 @@ final class BarWindow {
 
     var swipe: Swipe? { didSet { if swipe != oldValue { drawGlass() } } }
 
+    /// Room below the bar (a top one): a bracket grown with the app's menus (BarApp's menu bar)
+    var extra = 0.0
+
     init(display: Int) {
         self.display = display
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 100, height: 25), styleMask: [.borderless, .nonactivatingPanel],
@@ -661,6 +664,7 @@ final class BarWindow {
         let frame = screen.frame
         var height = bar.height
         if bar.notchDisplayHeight > 0, screen.safeAreaInsets.top > 0 { height = bar.notchDisplayHeight }
+        if bar.position != "bottom" { height += extra }
         let y = bar.position == "bottom" ? frame.minY + bar.yOffset : frame.maxY - height - bar.yOffset
         panel.setFrame(NSRect(x: frame.minX + bar.margin, y: y, width: max(1, frame.width - 2 * bar.margin), height: max(1, height)),
                        display: false)

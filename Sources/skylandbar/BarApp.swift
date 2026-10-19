@@ -47,6 +47,17 @@ final class BarApp {
     private var notchTicker: FrameTicker?
     private var notchHover: DispatchWorkItem?
     private var notchOpen = false
+    /// the frontmost app's menus in a bracket's glass (an item's `menubar=<bracket>`), how open
+    /// (0...1, a spring), the title under the mouse and the one whose menu is open
+    private var menuBar: (trigger: String, bracket: String, display: Int, menus: [(title: String, menu: AXUIElement?)])?
+    private var menuOpen = false
+    private var menuProgress = 0.0
+    private var menuMove: (from: Double, to: Double, start: Double)?
+    private var menuTicker: FrameTicker?
+    private var menuHovered: String?
+    private var menuShown: String?
+    private var menuMonitor: Any?
+    private let menuBarCover = MenuBarCover()
 
     init(configPath: String?) {
         self.configPath = configPath
@@ -121,6 +132,7 @@ final class BarApp {
         model.currentSpaces = Spaces.current()
         focusedDisplay = Windows.focusedDisplay()
         watchAccessibilityAndAppearance()
+        menuBarCover.onHide = { [unowned self] in self.configureWindows() }
         rebuildWindows()
         runConfig()
     }
@@ -597,7 +609,7 @@ final class BarApp {
         }
         let active = activeDisplay
         for window in windows {
-            let hidden = bar.hidden == "on" || (bar.hidden == "current" && window.display == active)
+            let hidden = (bar.hidden == "on" && !menuBarCover.isShown) || (bar.hidden == "current" && window.display == active)
             if hidden { window.panel.orderOut(nil) } else { window.panel.orderFrontRegardless() }
         }
         if layout { setNeedsLayout() }
@@ -626,10 +638,18 @@ final class BarApp {
         let window = BarWindow(display: display)
         let view = window.view, id = ObjectIdentifier(window)
         view.onItemEntered = { [unowned self] name in
+            if name.hasPrefix("menubar.") {
+                self.menuHovered = name
+                return self.setNeedsLayout()
+            }
             if self.model.setHovered(name) { self.startFrames() }
             self.scripts.run(self.model.scripts(for: "mouse.entered", only: name))
         }
         view.onItemExited = { [unowned self] name in
+            if self.menuHovered == name {
+                self.menuHovered = nil
+                return self.setNeedsLayout()
+            }
             if self.model.hovered == name, self.model.setHovered(nil) { self.startFrames() }
             self.scripts.run(self.model.scripts(for: "mouse.exited", only: name))
         }
@@ -645,8 +665,20 @@ final class BarApp {
                 if self.mouseIn.isEmpty { self.scripts.run(self.model.scripts(for: "mouse.exited.global")) }
             }
         }
-        view.onClick = { [unowned self] name, button, modifier in
+        view.onClick = { [unowned self, unowned view] name, button, modifier in
             if button == "left", let workspace = self.model.workspace(of: name) { SkylandSocket.run(["workspace", workspace]) }
+            if name.hasPrefix("menubar.") { return self.dropMenu(name, in: view) }
+            if button == "left", let extra = self.model.item(named: name)?.props.menuExtra, !extra.isEmpty {
+                return AppMenu.pressExtra(extra) { pid in
+                    self.menuBarCover.show(under: self.windows.map(\.panel), height: self.model.bar.height, menuOf: pid)
+                }
+            }
+            if button == "left", let menubar = self.model.item(named: name)?.props.menubar, !menubar.isEmpty {
+                if self.menuOpen { return self.setMenuBar(open: false) }
+                if self.model.bar.position != "bottom" { return self.setMenuBar(open: true, trigger: name, display: display) }
+                if let placed = view.items.first(where: { $0.name == name }) { return AppMenu.popUp(under: placed.rect, in: view) }
+            }
+            if self.menuOpen { self.setMenuBar(open: false) } // a click elsewhere on the bar
             if let item = self.model.item(named: name), item.kind == "alias", item.props.clickScript.isEmpty,
                !item.subscriptions.contains("mouse.clicked")
             {
@@ -714,8 +746,13 @@ final class BarApp {
         /// where items are on screen (AppKit coordinates), for the popups under them
         var anchors: [String: (rect: NSRect, display: Int)] = [:]
         for window in windows {
+            let extra = menuBar?.display == window.display ? menuExtra : 0
+            if window.extra != extra {
+                window.extra = extra
+                window.configure(bar, screen: NSScreen.screens[window.display - 1])
+            }
             let frame = window.panel.frame
-            let width = Double(frame.width), height = Double(frame.height)
+            let width = Double(frame.width), height = Double(frame.height) - extra
             let spaces = model.currentSpaces[window.display].map { [$0] } ?? []
             let shown = model.items.filter { item in
                 item.kind != "bracket" && item.kind != "workspaces" && item.props.drawing && itemPositions.contains(item.props.position)
@@ -737,9 +774,10 @@ final class BarApp {
                 guard let x = xs[shown[index].name] else { continue }
                 items.append(placed(shown[index], props[index], x: x, length: lengths[index], top: 0, height: height, middle: middles[index]))
                 frames[shown[index].name, default: [:]]["display-\(window.display)"] = Box(x: x, y: 0, width: lengths[index], height: height)
-                anchors[shown[index].name] = (NSRect(x: frame.minX + x, y: frame.minY, width: lengths[index], height: frame.height), window.display)
+                anchors[shown[index].name] = (NSRect(x: frame.minX + x, y: frame.maxY - height, width: lengths[index], height: height), window.display)
             }
-            window.view.show(brackets(around: items, height: height) + items, style: PanelStyle(bar: bar))
+            window.view.show(withMenuBar(brackets(around: items, height: height) + items, display: window.display, row: height),
+                             style: PanelStyle(bar: bar))
             window.updateGlass(glassSettings(bar)) // every layout: the metal glass follows the window
         }
         layoutPopups(bar: bar, anchors: &anchors, frames: &frames)
@@ -818,6 +856,133 @@ final class BarApp {
         window.view.show(items, style: PanelStyle(popup: popup, fontSmoothing: bar.fontSmoothing))
         window.updateGlass(glassSettings(bar))
         window.panel.orderFrontRegardless()
+    }
+
+    // MARK: menu bar
+
+    /// Opens (the frontmost app's menus read now) or closes the menu bar in `bracket`'s glass,
+    /// on a spring as the notch; a click in another app closes it.
+    private func setMenuBar(open: Bool, trigger: String = "", display: Int = 0) {
+        guard open != menuOpen else { return }
+        if open {
+            let menus = AppMenu.menus()
+            guard !menus.isEmpty else { return }
+            menuBar = (trigger, model.item(named: trigger)?.props.menubar ?? "", display, menus)
+            menuMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [unowned self] _ in
+                self.setMenuBar(open: false)
+            }
+        } else if let monitor = menuMonitor {
+            NSEvent.removeMonitor(monitor)
+            menuMonitor = nil
+        }
+        menuOpen = open
+        menuMove = (menuProgress, open ? 1 : 0, ProcessInfo.processInfo.systemUptime)
+        if menuTicker == nil {
+            menuTicker = FrameTicker(view: windows.first { $0.display == menuBar?.display }?.view) { [unowned self] in self.menuFrame() }
+        }
+    }
+
+    private func menuFrame() {
+        guard let move = menuMove else { return }
+        let elapsed = ProcessInfo.processInfo.systemUptime - move.start
+        // quick: a little past open, closing without a bounce
+        let spring = move.to == 1 ? Spring(response: 0.32, damping: 0.75) : Spring(response: 0.28, damping: 1)
+        let done = model.reduceMotion || elapsed >= spring.duration
+        menuProgress = done ? move.to : mix(move.from, move.to, spring.value(elapsed))
+        if done {
+            menuMove = nil
+            menuTicker?.stop()
+            menuTicker = nil
+            if move.to == 0 { menuBar = nil }
+        }
+        layoutNow()
+    }
+
+    /// The room the open menu bar takes below the bar: its second row, as far as it dropped.
+    private var menuExtra: Double {
+        guard let menuBar, let trigger = model.item(named: menuBar.trigger) else { return 0 }
+        let own = model.displayed(trigger).background.height
+        let height = own > 0 ? own : model.item(named: menuBar.bracket).map { model.displayed($0).background.height } ?? model.bar.height - 4
+        return (height + model.bar.glassSpacing + 2) * max(0, min(1, menuProgress / 0.45))
+    }
+
+    /// The open menu bar, as one shape of glass with the item that has `menubar`: its bubble
+    /// drops down a row (a drop of glass, 0...0.45 of the spring), then a row runs right from
+    /// it under the other items (0.35...1), as far as the menus' titles go, and to the end of
+    /// the bracket `menubar` names; the titles show as the row reaches them. Rows and the
+    /// item stay `gap` off the other glass: shapes nearer than glass_spacing would melt.
+    private func withMenuBar(_ items: [PlacedItem], display: Int, row: Double) -> [PlacedItem] {
+        guard let menuBar, menuBar.display == display, let item = model.item(named: menuBar.trigger),
+              let index = items.firstIndex(where: { $0.name == menuBar.trigger }) else { return items }
+        var items = items
+        let trigger = items[index]
+        let bracket = items.first { $0.name == menuBar.bracket }
+        let gap = model.bar.glassSpacing + 2
+        let height = trigger.props.background.height > 0 ? trigger.props.background.height : bracket?.props.background.height ?? row - 4
+        let p = menuProgress
+        let drop = max(0, min(1, p / 0.45)), run = max(0, (p - 0.35) / 0.65) // run overshoots with the spring
+        let down = (height + gap) * drop
+        var glass = BackgroundProps()
+        glass.drawing = true
+        glass.glass = bracket?.props.background.glass ?? "regular"
+        glass.color = bracket?.props.background.color ?? .clear
+        let opacity = model.displayed(item).menubarOpacity
+        if opacity > 0 { glass.color = ARGB(UInt32((opacity * 255).rounded()) << 24 | (Self.appearance == "dark" ? 0 : 0xFF_FFFF)) }
+        glass.cornerRadius = height / 2
+        var props = trigger.props
+        props.background.glass = "off" // its hover glass: the drop's now
+        items[index] = PlacedItem(name: trigger.name, kind: trigger.kind, x: trigger.x, length: trigger.length, top: trigger.top,
+                                  height: trigger.height, props: props, middle: trigger.middle)
+        var label = model.displayed(item).label
+        label.drawing = true
+        // room around each title for its hover drop
+        label.paddingLeft = max(label.paddingLeft, 10)
+        label.paddingRight = max(label.paddingRight, 10)
+        let top = (row - height) / 2 + height + gap // the second row's
+        var titles: [PlacedItem] = []
+        var x = trigger.x + trigger.length + 4
+        for (offset, menu) in menuBar.menus.enumerated() {
+            let name = "menubar.\(offset)"
+            var title = ItemProps()
+            title.icon.drawing = false
+            title.label = label
+            title.label.string = menu.title
+            if offset == 0 { title.label.font.style = "Bold" }
+            if name == menuShown || (menuShown == nil && name == menuHovered) {
+                title.background.drawing = true
+                title.background.glass = "hover"
+                title.background.height = height - 8
+                title.background.color = ARGB(label.color.value & 0x00FF_FFFF | 0x2400_0000)
+            }
+            let length = Layout.length(of: title, measure: Fonts.width, image: Images.width)
+            titles.append(PlacedItem(name: name, kind: "item", x: x, length: length, top: top, height: height, props: title))
+            x += length
+        }
+        let end = max(x + height / 2, bracket.map { $0.x + $0.length } ?? 0)
+        let reach = trigger.x + trigger.length + (end - trigger.x - trigger.length) * run
+        // glass only: a bracket draws its background, nothing else
+        let shape = { (name: String, x: Double, length: Double, top: Double, height: Double) -> PlacedItem in
+            var props = ItemProps()
+            props.background = glass
+            props.background.height = height
+            return PlacedItem(name: name, kind: "bracket", x: x, length: length, top: top, height: height, props: props)
+        }
+        var shapes = [shape("menubar.drop", trigger.x, trigger.length, (row - height) / 2, height + down)]
+        if run > 0 { shapes.append(shape("menubar.row", trigger.x, reach - trigger.x, top, height)) }
+        let shown = menuOpen ? titles.filter { $0.x + $0.length <= reach } : []
+        return shapes + items + shown
+    }
+
+    /// A title clicked: its menu drops under it; choosing an item closes the menu bar.
+    private func dropMenu(_ name: String, in view: BarView) {
+        guard let menuBar, let index = Int(name.dropFirst("menubar.".count)), menuBar.menus.indices.contains(index),
+              let placed = view.items.first(where: { $0.name == name }) else { return }
+        menuShown = name
+        layoutNow()
+        let menu = menuBar.menus[index]
+        let chosen = AppMenu.popUp(menu.title, menu.menu, under: placed.rect, in: view) // until the menu closes
+        menuShown = nil
+        if chosen { setMenuBar(open: false) } else { setNeedsLayout() }
     }
 
     /// Animations or not: the bar's `motion`, and with `auto` macOS's Reduce Motion.

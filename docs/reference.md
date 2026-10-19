@@ -100,6 +100,9 @@ warnings: a `/regex/` that matches nothing, `--add` of an item that is already t
 | `update_freq` | 0 | seconds between script runs (`SENDER=routine`) |
 | `script` | | shell command run on events it subscribes to and on `update_freq` |
 | `click_script` | | shell command run on a click |
+| `menubar` | off | a left click shows the frontmost app's menus (needs Accessibility), in place of `click_script`: the item's bubble drops a row and a row of glass runs right from it with the menus' titles (the item's `label` font and color; as far as the bracket named here reaches, if any), each dropping its menu; on a bottom bar, one native menu with the status extras |
+| `menubar_opacity` | 0 | the menu bar's glass: 0 the bracket's tint, up to 1 opaque (black, white in light mode) |
+| `menu_extra` | | a menu bar item's name (`wifi`, `battery`, `controlcenter`, `bluetooth`, `sound`, or a word of a third-party one's): a left click opens its own menu (needs Accessibility), in place of `click_script`; see [templates](../templates/) |
 | `scroll_texts` | off | long texts (`max_chars`) scroll |
 | `icon.*`, `label.*` | | text properties below |
 | `background.*` | | background properties below |
