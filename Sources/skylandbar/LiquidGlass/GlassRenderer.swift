@@ -93,10 +93,12 @@ enum GlassEngine {
                     asked = true
                     CGRequestScreenCaptureAccess()
                 }
-            default: engine = systemAvailable ? "system" : MetalGlass.isAvailable ? "metal" : "backdrop"
+                // Apple's glass where macOS has it (26+), else the backdrop blur: the metal engine's
+                // screen capture turned protected videos black and froze behind scrolling; on demand only
+                default: engine = systemAvailable ? "system" : "backdrop"
         }
         if said.insert("\(setting)>\(engine)").inserted {
-            let why = engine == "backdrop" && !systemAvailable
+            let why = engine == "backdrop" && !systemAvailable && setting == "metal"
                 ? " (metal, with refraction, needs Screen Recording: allow skylandbar in System Settings, then restart it)" : ""
             FileHandle.standardError.write(Data("skylandbar: glass: \(engine)\(why)\n".utf8))
         }
