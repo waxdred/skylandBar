@@ -130,6 +130,7 @@ final class BarApp {
             signalSources.append(source)
         }
         model.currentSpaces = Spaces.current()
+        fullScreenDisplays = Spaces.fullScreen() // started over a full screen app: hidden there
         focusedDisplay = Windows.focusedDisplay()
         watchAccessibilityAndAppearance()
         menuBarCover.onHide = { [unowned self] in self.configureWindows() }
@@ -298,8 +299,18 @@ final class BarApp {
 
     private var behindWork: DispatchWorkItem?
 
+    /// displays showing a full screen app (Spaces.fullScreen): no bar there
+    private var fullScreenDisplays: Set<Int> = []
+
     private func spaceChanged() {
         model.currentSpaces = Spaces.current()
+        // a full screen app or video: its display's bar goes, as the menu bar does (above
+        // every Space, the bar's level showed over it)
+        let full = Spaces.fullScreen()
+        if full != fullScreenDisplays {
+            fullScreenDisplays = full
+            configureWindows()
+        }
         setNeedsLayout() // `space=` items follow
         scripts.run(model.spaceChange())
         focusChanged()
@@ -628,6 +639,7 @@ final class BarApp {
         let active = activeDisplay
         for window in windows {
             let hidden = (bar.hidden == "on" && !menuBarCover.isShown) || (bar.hidden == "current" && window.display == active)
+                || fullScreenDisplays.contains(window.display)
             if hidden { window.panel.orderOut(nil) } else { window.panel.orderFrontRegardless() }
         }
         if layout { setNeedsLayout() }
