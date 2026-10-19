@@ -37,4 +37,14 @@ enum Spaces {
         }
         return result
     }
+
+    /// The displays (1-based, same order) showing a full screen app's space now: the green
+    /// button, a video's full screen (type 4; 0 is a desktop).
+    static func fullScreen() -> Set<Int> {
+        guard let connection, let copySpaces,
+              let displays = copySpaces(connection())?.takeRetainedValue() as? [[String: Any]] else { return [] }
+        return Set(displays.enumerated().compactMap { display, info in
+            (info["Current Space"] as? [String: Any])?["type"] as? Int == 4 ? display + 1 : nil
+        })
+    }
 }
