@@ -605,13 +605,14 @@ final class BarApp {
     }
 
     /// skyland lays windows out below the bar: tells it the room the bar takes at the top
-    /// (0 at the bottom or hidden) when it changes. From the bar's set properties, not the
+    /// (0 at the bottom) when it changes. Hidden keeps the room: skyland hides the bar while the
+    /// macOS menu bar slides in over it, and the windows must not resize. From the bar's set properties, not the
     /// animated ones: skyland gets the final height once, not every frame.
     /// One value for every display: the notch height when a notched display shows it.
     private func tellSkylandBarHeight() {
         let bar = model.bar
         var height = 0
-        if bar.position != "bottom", bar.hidden != "on" {
+        if bar.position != "bottom" {
             let notched = NSScreen.screens.contains { $0.safeAreaInsets.top > 0 }
             let tallest = notched && bar.notchDisplayHeight > 0 ? max(bar.height, bar.notchDisplayHeight) : bar.height
             height = Int((tallest + bar.yOffset).rounded(.up))

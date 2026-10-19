@@ -40,9 +40,10 @@ the bar.
 ## Windows below the bar
 
 skylandbar tells skyland how much room it takes at the top (`height` + `y_offset`, or the notch
-height on a notched display; 0 at the bottom or hidden) when it starts, when its config changes,
+height on a notched display; 0 at the bottom) when it starts, when its config changes,
 and when skyland restarts, with skyland's `bar-height` command. skyland tiles windows below it;
-nothing to keep in sync in skyland's config. Quitting the bar gives the room back.
+nothing to keep in sync in skyland's config. A hidden bar keeps its room (skyland hides it while the
+macOS menu bar slides in, and the windows keep their size); quitting the bar gives the room back.
 
 ## Theme
 
