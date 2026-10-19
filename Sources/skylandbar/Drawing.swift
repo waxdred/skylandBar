@@ -206,10 +206,27 @@ final class BarView: NSView {
     @discardableResult
     func show(_ items: [PlacedItem], style: PanelStyle) -> Bool {
         guard items != self.items || style != self.style || bounds.size != drawnSize else { return false }
+        // the same items, some moved or changed (an animation frame): only where they were and
+        // are now is drawn again; each frame redrew the whole bar, the busiest work while switching
+        let partial = style == self.style && bounds.size == drawnSize && items.map(\.name) == self.items.map(\.name)
+        let old = self.items
         self.items = items
         self.style = style
-        needsDisplay = true
+        if partial {
+            for (was, now) in zip(old, items) where was != now {
+                setNeedsDisplay(extent(was))
+                setNeedsDisplay(extent(now))
+            }
+        } else {
+            needsDisplay = true
+        }
         return true
+    }
+
+    /// Where an item may draw: its row and its background (moved by x_offset), with room
+    /// for shadows and borders.
+    private func extent(_ item: PlacedItem) -> NSRect {
+        item.rect.union(item.rect.offsetBy(dx: item.props.background.xOffset, dy: 0)).insetBy(dx: -16, dy: -16)
     }
 
     /// Redraws just the texts that scroll.
@@ -256,7 +273,7 @@ final class BarView: NSView {
             path.stroke()
         }
         clipBackgrounds()
-        for item in items { draw(item) }
+        for item in items where needsToDraw(extent(item)) { draw(item) }
     }
 
     /// The notch in a flipped `rect`: its top edge along the screen's, curving out by
