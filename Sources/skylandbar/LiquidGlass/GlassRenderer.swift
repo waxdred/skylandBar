@@ -14,6 +14,8 @@ import SkylandBarCore
 
 /// One glass shape, in the window's flipped coordinates (points).
 struct GlassShape: Equatable {
+    /// for a rim: where and how round
+    var part: (rect: NSRect, radius: Double) { (rect, radius) }
     var rect: NSRect
     var radius: Double
     var tint: ARGB
@@ -183,9 +185,20 @@ final class SystemGlass: GlassRenderer {
         // them all, in colors along the diagonal (more while it moves: its shape shows)
         let lensParts = dropShapes.filter { $0.style == "lens" || $0.style == "bead" }
         let lensLift = lensParts.map(\.lift).max() ?? 0
-        let rimmed = Self.overlapping(groupShapes).map { ($0, 1.0, 0.0) }
-            + Self.overlapping(lensParts).map { ($0, 1.5 + 0.5 * lensLift, 0.35 + 0.65 * lensLift) }
-            + dropShapes.filter { $0.style == "hover" }.map { ([($0.rect, $0.radius)], 1.5 + 0.5 * $0.lift, 0.0) }
+        // groups: their tint filled under the rim. Apple's glass took none of it (any tint, opaque
+        // black or red, came out the same light gray): background.color, glass_tint and the menu
+        // bar's menubar_opacity did nothing. The most opaque tint of shapes that melt together.
+        typealias Rimmed = (shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double, tint: ARGB?)
+        var rimmed: [Rimmed] = []
+        for group in Self.overlapping(groupShapes) {
+            rimmed.append((group.map(\.part), 1.0, 0.0, group.map(\.tint).max { $0.alpha < $1.alpha }))
+        }
+        for group in Self.overlapping(lensParts) {
+            rimmed.append((group.map(\.part), 1.5 + 0.5 * lensLift, 0.35 + 0.65 * lensLift, nil))
+        }
+        for hover in dropShapes where hover.style == "hover" {
+            rimmed.append(([hover.part], 1.5 + 0.5 * hover.lift, 0.0, nil))
+        }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()
@@ -195,7 +208,7 @@ final class SystemGlass: GlassRenderer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (rim, (shapes, strength, colors)) in zip(rims, rimmed) { rim.set(shapes, strength: strength, colors: colors) }
+        for (rim, (shapes, strength, colors, tint)) in zip(rims, rimmed) { rim.set(shapes, strength: strength, colors: colors, fill: tint) }
         CATransaction.commit()
         if let lens = dropShapes.first {
             GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
@@ -231,12 +244,11 @@ final class SystemGlass: GlassRenderer {
     }
 
     /// The shapes in groups of those that overlap, each group one rim.
-    private static func overlapping(_ shapes: [GlassShape]) -> [[(rect: NSRect, radius: Double)]] {
-        var groups: [[(rect: NSRect, radius: Double)]] = []
+    private static func overlapping(_ shapes: [GlassShape]) -> [[GlassShape]] {
+        var groups: [[GlassShape]] = []
         for shape in shapes {
-            let part = (rect: shape.rect, radius: shape.radius)
             let joined = groups.indices.filter { groups[$0].contains { $0.rect.intersects(shape.rect) } }
-            var group = joined.flatMap { groups[$0] } + [part]
+            var group = joined.flatMap { groups[$0] } + [shape]
             for index in joined.reversed() { groups.remove(at: index) }
             group.sort { $0.rect.minX < $1.rect.minX }
             groups.append(group)
