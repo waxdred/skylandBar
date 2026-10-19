@@ -25,6 +25,8 @@ struct GlassShape: Equatable {
     var lift = 0.0
     /// a lens: the drop it leaves behind while it moves, melted into it
     var tail: NSRect?
+    /// inner corners where it meets its group (BackgroundProps.fillet), 0: the rim's default
+    var fillet = 0.0
     /// a moving lens: the side it goes to (-1 left, 1 right, 0 at rest) and how stretched it
     /// is (0...1): Apple's glass draws it as a drop, a round head and a thinning body
     var heading = 0.0
@@ -188,16 +190,16 @@ final class SystemGlass: GlassRenderer {
         // groups: their tint filled under the rim. Apple's glass took none of it (any tint, opaque
         // black or red, came out the same light gray): background.color, glass_tint and the menu
         // bar's menubar_opacity did nothing. The most opaque tint of shapes that melt together.
-        typealias Rimmed = (shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double, tint: ARGB?)
+        typealias Rimmed = (shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double, tint: ARGB?, fillet: Double)
         var rimmed: [Rimmed] = []
         for group in Self.overlapping(groupShapes) {
-            rimmed.append((group.map(\.part), 1.0, 0.0, group.map(\.tint).max { $0.alpha < $1.alpha }))
+            rimmed.append((group.map(\.part), 1.0, 0.0, group.map(\.tint).max { $0.alpha < $1.alpha }, group.map(\.fillet).max() ?? 0))
         }
         for group in Self.overlapping(lensParts) {
-            rimmed.append((group.map(\.part), 1.5 + 0.5 * lensLift, 0.35 + 0.65 * lensLift, nil))
+            rimmed.append((group.map(\.part), 1.5 + 0.5 * lensLift, 0.35 + 0.65 * lensLift, nil, 0))
         }
         for hover in dropShapes where hover.style == "hover" {
-            rimmed.append(([hover.part], 1.5 + 0.5 * hover.lift, 0.0, nil))
+            rimmed.append(([hover.part], 1.5 + 0.5 * hover.lift, 0.0, nil, 0))
         }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
@@ -208,7 +210,10 @@ final class SystemGlass: GlassRenderer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (rim, (shapes, strength, colors, tint)) in zip(rims, rimmed) { rim.set(shapes, strength: strength, colors: colors, fill: tint) }
+        for (rim, (shapes, strength, colors, tint, fillet)) in zip(rims, rimmed) {
+            rim.set(shapes, strength: strength, colors: colors, fill: tint, fillet: fillet)
+        }
+        maskCuts()
         CATransaction.commit()
         if let lens = dropShapes.first {
             GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
@@ -241,6 +246,30 @@ final class SystemGlass: GlassRenderer {
             parts.append(bead)
         }
         return parts
+    }
+
+    /// The glass outside the rims' cuts (the L's round outer corner): masked off, so Apple's
+    /// glass, made of rounded rects, follows the corner the rim and the tint draw.
+    private func maskCuts() {
+        guard let layer = bodies.container.layer else { return }
+        let cuts = rims.compactMap { rim in rim.outerCut.map { (rim.frame.origin, $0) } }
+        guard !cuts.isEmpty else {
+            layer.mask = nil
+            return
+        }
+        let bounds = layer.bounds
+        let mask = (layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+        mask.frame = bounds
+        mask.fillRule = .evenOdd
+        let path = CGMutablePath()
+        path.addRect(bounds)
+        // the rims are in the flipped view's coordinates: y down; the container may not be flipped
+        let flip = bodies.container.isFlipped ? .identity : CGAffineTransform(translationX: 0, y: bounds.height).scaledBy(x: 1, y: -1)
+        for (origin, cut) in cuts {
+            path.addPath(cut, transform: CGAffineTransform(translationX: origin.x, y: origin.y).concatenating(flip))
+        }
+        mask.path = path
+        layer.mask = mask
     }
 
     /// The shapes in groups of those that overlap, each group one rim.

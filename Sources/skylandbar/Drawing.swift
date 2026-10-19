@@ -740,8 +740,10 @@ final class BarWindow {
             shapes.append(GlassShape(rect: style.glassRect ?? view.bounds, radius: style.cornerRadius, tint: style.color, style: style.glass))
         }
         for background in view.glassBackgrounds() {
-            shapes.append(GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),
-                                     tint: background.background.color, style: background.background.glass))
+            var shape = GlassShape(rect: background.rect, radius: view.radius(background.background, background.rect),
+                                   tint: background.background.color, style: background.background.glass)
+            shape.fillet = background.background.fillet
+            shapes.append(shape)
         }
         // a lens (or a hover drop) is one inside other glass only; on its own it is glass
         let isDrop = { (style: String) in style == "lens" || style == "hover" }

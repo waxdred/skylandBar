@@ -168,6 +168,10 @@ final class GlassRim: CALayer {
     private let sheen = CAGradientLayer(), sheenMask = CAShapeLayer()
     /// the group's tint, over the glass and under the rim (Apple's glass ignores its own)
     private let tint = CAShapeLayer()
+    /// The part of the L's bottom-left corner outside its round, in the rim's coordinates (nil
+    /// for other shapes): the glass under it is masked off (SystemGlass), so Apple's glass
+    /// follows the L's corner too.
+    private(set) var outerCut: CGPath?
 
     override init() {
         super.init()
@@ -195,17 +199,24 @@ final class GlassRim: CALayer {
     /// row) get one rim around them all: their glass is one.
     /// `colors` (0...1): the rim and a sheen in colors along the diagonal, cyan, magenta,
     /// yellow, as light split by the glass (a lens's: its shape shows as it moves).
-    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double = 0, fill: ARGB? = nil) {
+    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double = 0, fill: ARGB? = nil, fillet: Double = 0) {
         let rect = shapes.map(\.rect).reduce(shapes[0].rect) { $0.union($1) }
         frame = rect
         let bounds = CGRect(origin: .zero, size: rect.size)
+        let local = shapes.map { $0.rect.offsetBy(dx: -rect.minX, dy: -rect.minY) }
+        outerCut = nil
         let path = { (inset: CGFloat) -> CGPath in
+            // the menu bar's L: one path, concentric corners (lPath)
+            if fillet > 0, shapes.count == 2, let l = Self.lPath(local[0], local[1], fillet: fillet, inset: inset) {
+                if inset == 0 { self.outerCut = l.cut }
+                return l.path
+            }
             let joined = shapes.map { shape -> CGPath in
                 let r = shape.rect.offsetBy(dx: -rect.minX, dy: -rect.minY).insetBy(dx: inset, dy: inset)
                 let corner = min(max(0, CGFloat(shape.radius) - inset), r.height / 2, r.width / 2)
                 return CGPath(roundedRect: r, cornerWidth: corner, cornerHeight: corner, transform: nil)
             }.reduce(nil as CGPath?) { $0?.union($1) ?? $1 }!
-            return shapes.count > 1 ? Self.rounded(joined, CGFloat(Self.fillet)) : joined
+            return shapes.count > 1 ? Self.rounded(joined, CGFloat(fillet > 0 ? fillet : Self.fillet)) : joined
         }
         tint.frame = bounds
         tint.path = path(0)
@@ -238,6 +249,33 @@ final class GlassRim: CALayer {
 extension GlassRim {
     /// the inner corners of joined shapes (the menu bar's L): rounded this much
     static let fillet = 10.0
+
+    /// The menu bar's L (a stem, then a row along its bottom, y down): its inner corner
+    /// `fillet` round, concentric to the bracket the L goes around, and its outer bottom-left
+    /// corner concentric to that one (fillet + the L's width), as Apple's concentric shapes.
+    /// The stem and the row keep their capsule ends. Nil when the two rects are not an L.
+    static func lPath(_ a: CGRect, _ b: CGRect, fillet: Double, inset: CGFloat) -> (path: CGPath, cut: CGPath)? {
+        let (stem, row) = a.height > b.height ? (a, b) : (b, a)
+        guard abs(stem.minX - row.minX) < 1, abs(stem.maxY - row.maxY) < 1, row.maxX > stem.maxX + 1, row.minY > stem.minY + 1 else { return nil }
+        let s = stem.insetBy(dx: inset, dy: inset), r = row.insetBy(dx: inset, dy: inset)
+        let cap = s.width / 2, end = r.height / 2
+        let f = min(CGFloat(fillet), r.minY - s.minY - cap, r.maxX - s.maxX - end)
+        guard f > 0 else { return nil }
+        let o = min(f + s.width, s.height - cap, r.width - end) // concentric to the inner round
+        let tl = CGPoint(x: s.minX, y: s.minY), tr = CGPoint(x: s.maxX, y: s.minY), corner = CGPoint(x: s.maxX, y: r.minY)
+        let rt = CGPoint(x: r.maxX, y: r.minY), rb = CGPoint(x: r.maxX, y: r.maxY), bl = CGPoint(x: s.minX, y: r.maxY)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: s.midX, y: s.minY))
+        path.addArc(tangent1End: tr, tangent2End: corner, radius: cap)
+        path.addArc(tangent1End: corner, tangent2End: rt, radius: f)
+        path.addArc(tangent1End: rt, tangent2End: rb, radius: end)
+        path.addArc(tangent1End: rb, tangent2End: bl, radius: end)
+        path.addArc(tangent1End: bl, tangent2End: tl, radius: o)
+        path.addArc(tangent1End: tl, tangent2End: tr, radius: cap)
+        path.closeSubpath()
+        let cut = CGPath(rect: CGRect(x: s.minX, y: r.maxY - o, width: o, height: o), transform: nil).subtracting(path)
+        return (path, cut)
+    }
 
     /// `path` with its inner corners rounded by `radius` (a closing: grown by it, then shrunk
     /// back), its outer ones as they were.
