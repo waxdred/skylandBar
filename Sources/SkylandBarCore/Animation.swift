@@ -75,7 +75,9 @@ extension ImageProps {
 extension BackgroundProps {
     static func blend(_ a: BackgroundProps, _ b: BackgroundProps, _ t: Double) -> BackgroundProps {
         var r = b
-        r.color = .mix(a.color, b.color, t)
+        // a lens that leaves: its drop takes the look along; fading here, as a plain fill, it
+        // stayed behind as a grey disc on the item it left
+        r.color = a.glass == "lens" && b.glass != "lens" ? b.color : .mix(a.color, b.color, t)
         r.borderColor = .mix(a.borderColor, b.borderColor, t)
         r.borderWidth = mix(a.borderWidth, b.borderWidth, t)
         r.height = mix(a.height, b.height, t)

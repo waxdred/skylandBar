@@ -536,6 +536,19 @@ final class WorkspaceComponentTests: XCTestCase {
         XCTAssertEqual(model.displayed(model.item(named: "ws.3")!).yOffset, 4 * Curve.tanh.value(0.5), accuracy: 1e-9)
     }
 
+    func testLensLeavesNoFill() {
+        let model = BarModel()
+        model.clock = { 0 }
+        _ = send(model, ["--add", "workspaces", "ws", "left", "--set", "ws", "workspaces.animation=tanh", "workspaces.animation_frames=30",
+                         "background.color=0x00000000", "focused.background.glass=lens", "focused.background.color=0xff336699"])
+        model.setWorkspaces(SkylandData.workspaces(workspacesJSON, windows: windowsJSON))
+        let moved = workspacesJSON.replacingOccurrences(of: "\"workspace\":\"1\",\"workspace-is-focused\":true", with: "\"workspace\":\"1\",\"workspace-is-focused\":false")
+            .replacingOccurrences(of: "\"workspace\":\"3\",\"workspace-is-focused\":false", with: "\"workspace\":\"3\",\"workspace-is-focused\":true")
+        model.setWorkspaces(SkylandData.workspaces(moved, windows: windowsJSON))
+        XCTAssertEqual(model.displayed(model.item(named: "ws.1")!).background.color.value, 0) // left: no fill fading out
+        XCTAssertEqual(model.displayed(model.item(named: "ws.3")!).background.color.value, 0) // the lens comes in: its tint fades in
+    }
+
     func testTitle() {
         let model = BarModel()
         _ = send(model, ["--add", "title", "t", "center", "--set", "t", "title.app_icon=on"])
