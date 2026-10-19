@@ -150,7 +150,7 @@ final class SystemGlass: GlassRenderer {
                 // round as it shrinks: a drop (the shader's narrowed into a tall pill on its own);
                 // gone once small, not a ring left by the item
                 let side = min(tail.width, tail.height)
-                guard side > shape.rect.height * 0.45 else { continue }
+                guard side > shape.rect.height * 0.2 else { continue } // small enough to go without a pop
                 drop.rect = NSRect(x: tail.midX - side / 2, y: tail.midY - side / 2, width: side, height: side)
                 drop.radius = Double(side) / 2
                 drop.tail = nil
@@ -194,10 +194,13 @@ final class SystemGlass: GlassRenderer {
         let head = lens.rect, headR = Double(head.height) / 2
         let life = min(1, max(0, Double(tail.height / max(head.height, 1))))
         let neckLife = min(1, max(0, (life - 0.6) / 0.35)), smooth = neckLife * neckLife * (3 - 2 * neckLife)
-        let thickness = 2 * headR * 0.22 * smooth
-        guard thickness > 1.5 else { return nil }
         let left = min(tail.midX, head.midX), right = max(tail.midX, head.midX)
-        guard right - left > headR else { return nil }
+        // a neck only while the lens is near its drop: a long jump stretched it into a wire
+        // across the bar; it thins as they part and snaps at 3 lens heights
+        let reach = 1 - Double(right - left) / (6 * headR)
+        guard right - left > headR, reach > 0 else { return nil }
+        let thickness = 2 * headR * 0.22 * smooth * min(1, reach * 2)
+        guard thickness > 1.5 else { return nil }
         let y = (tail.midY + head.midY) / 2
         var neck = lens
         neck.rect = NSRect(x: left, y: y - thickness / 2, width: right - left, height: thickness)
