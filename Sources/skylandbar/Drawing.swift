@@ -771,7 +771,9 @@ final class BarWindow {
     /// its speed); frames follow while one moves.
     private func drawGlass() {
         lenses.response = swipe == nil ? glassSettings.lensResponse : 0.08 // a short spring: it keeps up with the fingers
-        lenses.leavesDrop = swipe == nil
+        // Apple's glass draws the lens itself as a drop (SystemGlass.drop): no drop left behind,
+        // whose dark ring stayed at the item it left
+        lenses.leavesDrop = swipe == nil && glassEngine != "system"
         lenses.bounce = glassSettings.lensBounce
         lenses.stretch = glassSettings.lensStretch
         var shapes = glassTargets
@@ -813,6 +815,9 @@ final class BarWindow {
             shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             shapes[index].lift = swipe == nil ? lifts[offset] : 0 // with the fingers: as it is, not lifted (it darkened)
             shapes[index].tail = tails[offset].map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+            let target = targets[offset], toward = (target.x + target.width / 2) - Double(shapes[index].rect.midX)
+            shapes[index].heading = swipe == nil && abs(toward) > 0.5 ? (toward > 0 ? 1 : -1) : 0
+            shapes[index].stretch = min(1, max(0, (Double(shapes[index].rect.width) - target.width) / (0.8 * max(1, target.width))))
             if let swipeDrop, swipeDrop.index == index { shapes[index].tail = swipeDrop.rect }
         }
         glass?.update(shapes, settings: glassSettings, window: panel)
@@ -841,6 +846,9 @@ final class FrameTicker: NSObject {
         super.init()
         if let view {
             let link = view.displayLink(target: self, selector: #selector(step))
+            // 60 at most: on a 120 Hz display each frame moved Apple's glass views, the bar's
+            // main cost while switching workspaces
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
             link.add(to: .main, forMode: .common)
             self.link = link
         } else {

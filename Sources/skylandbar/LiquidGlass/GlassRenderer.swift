@@ -23,6 +23,10 @@ struct GlassShape: Equatable {
     var lift = 0.0
     /// a lens: the drop it leaves behind while it moves, melted into it
     var tail: NSRect?
+    /// a moving lens: the side it goes to (-1 left, 1 right, 0 at rest) and how stretched it
+    /// is (0...1): Apple's glass draws it as a drop, a round head and a thinning body
+    var heading = 0.0
+    var stretch = 0.0
 }
 
 struct GlassSettings: Equatable {
@@ -142,10 +146,14 @@ final class SystemGlass: GlassRenderer {
     }
 
     func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow) {
-        let isDrop = { (style: String) in style == "lens" || style == "hover" }
+        let isDrop = { (style: String) in style == "lens" || style == "hover" || style == "bead" }
         var groupShapes: [GlassShape] = [], dropShapes: [GlassShape] = []
         for shape in shapes {
             guard isDrop(shape.style) else { groupShapes.append(shape); continue }
+            if shape.style == "lens", shape.heading != 0 {
+                dropShapes += Self.drop(shape)
+                continue
+            }
             dropShapes.append(shape)
             if let tail = shape.tail, tail.width > 0 { // its drop left behind, the same glass
                 var drop = shape
@@ -171,9 +179,13 @@ final class SystemGlass: GlassRenderer {
               in: drops.holder, views: &dropViews, keep: true)
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
-        // the double rims, over all the glass
-        let rimmed = Self.overlapping(groupShapes).map { ($0, 1.0) }
-            + dropShapes.filter { $0.style == "lens" || $0.style == "hover" }.map { ([($0.rect, $0.radius)], 1.5 + 0.5 * $0.lift) }
+        // the double rims, over all the glass; a lens and its drop's beads get one rim around
+        // them all, in colors along the diagonal (more while it moves: its shape shows)
+        let lensParts = dropShapes.filter { $0.style == "lens" || $0.style == "bead" }
+        let lensLift = lensParts.map(\.lift).max() ?? 0
+        let rimmed = Self.overlapping(groupShapes).map { ($0, 1.0, 0.0) }
+            + Self.overlapping(lensParts).map { ($0, 1.5 + 0.5 * lensLift, 0.35 + 0.65 * lensLift) }
+            + dropShapes.filter { $0.style == "hover" }.map { ([($0.rect, $0.radius)], 1.5 + 0.5 * $0.lift, 0.0) }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()
@@ -183,12 +195,39 @@ final class SystemGlass: GlassRenderer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (rim, (shapes, strength)) in zip(rims, rimmed) { rim.set(shapes, strength: strength) }
+        for (rim, (shapes, strength, colors)) in zip(rims, rimmed) { rim.set(shapes, strength: strength, colors: colors) }
         CATransaction.commit()
         if let lens = dropShapes.first {
             GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
                             lift: dropShapes.map(\.lift).max() ?? 0)
         }
+    }
+
+    /// A moving lens as a drop of water: a round head at its leading end, then beads smaller
+    /// and smaller back to its trailing end, which the container melts into one shape that
+    /// thins behind the head. Not stretched, the beads are as big as the head: the lens as it
+    /// is. As the trailing end catches up, they go back into the head: round again.
+    private static func drop(_ lens: GlassShape) -> [GlassShape] {
+        let r = lens.rect, side = r.height
+        guard r.width > side + 1 else { return [lens] }
+        let right = lens.heading > 0
+        var head = lens
+        head.rect = NSRect(x: right ? r.maxX - side : r.minX, y: r.minY, width: side, height: side)
+        head.radius = side / 2
+        var parts = [head]
+        let count = min(6, max(1, Int(((r.width - side) / (side * 0.3)).rounded(.up))))
+        for i in 1 ... count {
+            let f = Double(i) / Double(count)
+            let size = side * (1 - 0.55 * min(1, max(0, lens.stretch)) * f)
+            let from = head.rect.midX, to = right ? r.minX + size / 2 : r.maxX - size / 2
+            let x = from + (to - from) * f
+            var bead = lens
+            bead.rect = NSRect(x: x - size / 2, y: r.midY - size / 2, width: size, height: size)
+            bead.radius = size / 2
+            bead.style = "bead"
+            parts.append(bead)
+        }
+        return parts
     }
 
     /// The shapes in groups of those that overlap, each group one rim.

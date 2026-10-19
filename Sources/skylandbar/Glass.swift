@@ -164,9 +164,15 @@ enum GlassLook {
 final class GlassRim: CALayer {
     private let outer = CAGradientLayer(), outerMask = CAShapeLayer()
     private let inner = CAGradientLayer(), innerMask = CAShapeLayer()
+    /// colors along the diagonal, inside the shape (a lens's)
+    private let sheen = CAGradientLayer(), sheenMask = CAShapeLayer()
 
     override init() {
         super.init()
+        sheen.mask = sheenMask
+        sheen.startPoint = CGPoint(x: 0, y: 0)
+        sheen.endPoint = CGPoint(x: 1, y: 1)
+        addSublayer(sheen)
         for (gradient, mask) in [(outer, outerMask), (inner, innerMask)] {
             mask.fillColor = nil
             mask.strokeColor = NSColor.black.cgColor
@@ -184,7 +190,9 @@ final class GlassRim: CALayer {
 
     /// `strength`: 1 for a group, more for a lens. Shapes that overlap (the menu bar's drop and
     /// row) get one rim around them all: their glass is one.
-    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double) {
+    /// `colors` (0...1): the rim and a sheen in colors along the diagonal, cyan, magenta,
+    /// yellow, as light split by the glass (a lens's: its shape shows as it moves).
+    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double = 0) {
         let rect = shapes.map(\.rect).reduce(shapes[0].rect) { $0.union($1) }
         frame = rect
         let bounds = CGRect(origin: .zero, size: rect.size)
@@ -207,6 +215,17 @@ final class GlassRim: CALayer {
         outer.locations = [0, 0.55, 1]
         inner.colors = [white(0.3), white(0.04), white(0)]
         inner.locations = [0, 0.5, 1]
+        sheen.isHidden = colors <= 0
+        guard colors > 0 else { return }
+        let tint = { (r: Double, g: Double, b: Double, alpha: Double) in NSColor(red: r, green: g, blue: b, alpha: min(1, alpha)).cgColor }
+        outer.colors = [tint(0.45, 0.9, 1, 0.75 * colors + 0.2), tint(1, 0.45, 0.9, 0.55 * colors), tint(1, 0.9, 0.4, 0.65 * colors + 0.1)]
+        outer.locations = [0, 0.5, 1]
+        sheen.frame = bounds
+        sheenMask.frame = bounds
+        sheenMask.path = path(0)
+        let a = 0.2 * colors
+        sheen.colors = [tint(0.45, 0.9, 1, a), tint(0.45, 0.9, 1, 0), tint(1, 0.45, 0.9, a), tint(1, 0.45, 0.9, 0), tint(1, 0.9, 0.4, a)]
+        sheen.locations = [0, 0.3, 0.5, 0.7, 1]
     }
 }
 
