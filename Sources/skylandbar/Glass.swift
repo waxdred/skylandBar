@@ -97,8 +97,7 @@ enum GlassLook {
                 "inputKeyFillHighlightAmount": 0.8 + 0.3 * lift,
                 "inputRingShadowOpacity": 0.4, "inputRingShadowOffset": 2, "inputRingShadowStrokeWidth": 1.2,
                 "inputRingShadowBlurRadius": 1.5,
-                "inputShadowOpacity": 0.35 + 0.15 * lift, "inputShadowAmount": 4 + 3 * lift, "inputShadowHeight": 4 + 3 * lift,
-                "inputShadowBlurRadius": 5 + 3 * lift,
+                "inputShadowOpacity": 0.3, "inputShadowAmount": 4, "inputShadowHeight": 4, "inputShadowBlurRadius": 5, // not with the speed: it darkened the lens
             ]
         } else {
             let band = min(2.3 * settings.refraction, max(2, height / 4))

@@ -778,7 +778,7 @@ final class BarWindow {
         for (offset, index) in indices.enumerated() {
             let rect = rects[offset]
             shapes[index].rect = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-            shapes[index].lift = lifts[offset]
+            shapes[index].lift = swipe == nil ? lifts[offset] : 0 // with the fingers: as it is, not lifted (it darkened)
             shapes[index].tail = tails[offset].map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
         }
         glass?.update(shapes, settings: glassSettings, window: panel)

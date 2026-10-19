@@ -147,8 +147,10 @@ final class SystemGlass: GlassRenderer {
             dropShapes.append(shape)
             if let tail = shape.tail, tail.width > 0 { // its drop left behind, the same glass
                 var drop = shape
-                // round as it shrinks: a drop (the shader's narrowed into a tall pill on its own)
+                // round as it shrinks: a drop (the shader's narrowed into a tall pill on its own);
+                // gone once small, not a ring left by the item
                 let side = min(tail.width, tail.height)
+                guard side > shape.rect.height * 0.45 else { continue }
                 drop.rect = NSRect(x: tail.midX - side / 2, y: tail.midY - side / 2, width: side, height: side)
                 drop.radius = Double(side) / 2
                 drop.tail = nil
