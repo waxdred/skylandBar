@@ -172,7 +172,8 @@ final class SystemGlass: GlassRenderer {
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
         // the double rims, over all the glass
-        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.filter { $0.style == "lens" || $0.style == "hover" }.map { ($0, 1.5 + 0.5 * $0.lift) }
+        let rimmed = Self.overlapping(groupShapes).map { ($0, 1.0) }
+            + dropShapes.filter { $0.style == "lens" || $0.style == "hover" }.map { ([($0.rect, $0.radius)], 1.5 + 0.5 * $0.lift) }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()
@@ -182,12 +183,26 @@ final class SystemGlass: GlassRenderer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (rim, (shape, strength)) in zip(rims, rimmed) { rim.set(shape.rect, radius: shape.radius, strength: strength) }
+        for (rim, (shapes, strength)) in zip(rims, rimmed) { rim.set(shapes, strength: strength) }
         CATransaction.commit()
         if let lens = dropShapes.first {
             GlassLook.apply(drops.container, settings: settings, height: Double(min(lens.rect.width, lens.rect.height)),
                             lift: dropShapes.map(\.lift).max() ?? 0)
         }
+    }
+
+    /// The shapes in groups of those that overlap, each group one rim.
+    private static func overlapping(_ shapes: [GlassShape]) -> [[(rect: NSRect, radius: Double)]] {
+        var groups: [[(rect: NSRect, radius: Double)]] = []
+        for shape in shapes {
+            let part = (rect: shape.rect, radius: shape.radius)
+            let joined = groups.indices.filter { groups[$0].contains { $0.rect.intersects(shape.rect) } }
+            var group = joined.flatMap { groups[$0] } + [part]
+            for index in joined.reversed() { groups.remove(at: index) }
+            group.sort { $0.rect.minX < $1.rect.minX }
+            groups.append(group)
+        }
+        return groups
     }
 
     /// The neck of liquid from a lens's drop to the lens, as skylandbar's shader drew it: one

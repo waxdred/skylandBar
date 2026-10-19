@@ -1,0 +1,19 @@
+# Wi-Fi as macOS shows it: its symbol (slashed when off), a click opens Apple's own Wi-Fi menu
+# (the switch, the networks, Wi-Fi settings). Needs Accessibility for the click.
+# Include it: include = ["themes/liquid-glass.toml", "templates/wifi.toml"]
+
+[[item]]
+name = "wifi"
+position = "right"
+icon = { string = "􀙇", font = "${font:-SF Pro}:Regular:15", padding_left = 10, padding_right = 10 }   # alone: centered in its hover drop
+label = { drawing = false }
+menu_extra = "wifi"
+update_freq = 10               # switched on or off from its menu: seen within 10 s (wifi_change: at once)
+script = '''
+port=$(networksetup -listallhardwareports | awk '/Wi-Fi/ { getline; print $2 }')
+networksetup -getairportpower "$port" | grep -q On && icon=􀙇 || icon=􀙈
+skylandbar --set "$NAME" icon="$icon"
+'''
+subscribe = ["wifi_change", "system_woke"]
+background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "concentric" }
+hover = { background.glass = "hover", background.color = "${hover:-0x24ffffff}" }

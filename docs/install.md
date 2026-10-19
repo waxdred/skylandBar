@@ -68,13 +68,21 @@ restarted after a clean exit). Restart it: `launchctl kickstart -k gui/$(id -u)/
 | Permission (System Settings > Privacy & Security) | For | Without it |
 | --- | --- | --- |
 | Screen Recording | the `metal` glass engine (refraction), aliases (copies of menu bar items) | glass falls back to `backdrop` (a blur, no refraction); aliases are empty |
-| Accessibility | clicks forwarded to an alias's real menu bar item | the click does nothing |
+| Accessibility | clicks forwarded to an alias's real menu bar item, `menubar` items | the click does nothing |
 | Location Services | the Wi-Fi network name in `wifi_change` | `INFO` is empty |
 
 macOS gives a permission to the **process that is responsible**. Started from a terminal, the bar
 uses the terminal's permissions; started by the launch agent, it needs its own: add the binary
 itself (`.build/arm64-apple-macosx/release/skylandbar`, ⌘⇧G in the file picker), then restart the
-bar. The binary is not signed: after a rebuild macOS may ask again.
+bar. The binary is signed ad hoc: after a rebuild macOS asks again. Signed with a certificate of
+your own, the permissions stay across rebuilds; then give it its icon (signing refuses a file
+that has one, so after):
+
+```sh
+xattr -c .build/arm64-apple-macosx/release/skylandbar   # the icon of the last build, if any
+codesign -f -s "<your identity>" --identifier com.waxdred.skylandbar .build/arm64-apple-macosx/release/skylandbar
+resources/icon/make-icns .build/arm64-apple-macosx/release/skylandbar
+```
 
 The bar says at start which glass it draws (`skylandbar: glass: metal`, or `backdrop` and why), on
 stderr or in the log.

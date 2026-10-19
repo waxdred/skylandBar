@@ -1,0 +1,12 @@
+# Control Center as macOS shows it: its symbol, a click opens Apple's own Control Center
+# (Wi-Fi, Bluetooth, AirDrop, Focus, display, sound, Now Playing). Needs Accessibility.
+# Include it: include = ["themes/liquid-glass.toml", "templates/control-center.toml"]
+
+[[item]]
+name = "controlcenter"
+position = "right"
+icon = { string = "􀜊", font = "${font:-SF Pro}:Regular:15", padding_left = 10, padding_right = 10 }   # alone: centered in its hover drop
+label = { drawing = false }
+menu_extra = "controlcenter"
+background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "concentric" }
+hover = { background.glass = "hover", background.color = "${hover:-0x24ffffff}" }

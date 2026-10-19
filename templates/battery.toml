@@ -1,0 +1,26 @@
+# The battery as macOS shows it: its level (charging: the bolt) and percent, a click opens
+# Apple's own battery menu (what uses energy, Low Power Mode, settings). Needs Accessibility
+# for the click. Include it: include = ["themes/liquid-glass.toml", "templates/battery.toml"]
+
+[[item]]
+name = "battery"
+position = "right"
+icon = { string = "􀛨", font = "${font:-SF Pro}:Regular:15" }
+label = { font = "${font:-SF Pro}:Medium:12" }
+menu_extra = "battery"
+update_freq = 120
+script = '''
+percent=$(pmset -g batt | grep -Eo "[0-9]+%" | tr -d %)
+case 1 in
+  $(( percent > 87 ))) icon=􀛨 ;;
+  $(( percent > 62 ))) icon=􀺸 ;;
+  $(( percent > 37 ))) icon=􀺶 ;;
+  $(( percent > 12 ))) icon=􀛩 ;;
+  *) icon=􀛪 ;;
+esac
+pmset -g batt | grep -q "AC Power" && icon=􀢋
+skylandbar --set "$NAME" icon="$icon" label="$percent%"
+'''
+subscribe = ["power_source_change", "system_woke"]
+background = { drawing = true, color = "0x00000000", height = 28, corner_radius = "concentric" }
+hover = { background.glass = "hover", background.color = "${hover:-0x24ffffff}" }

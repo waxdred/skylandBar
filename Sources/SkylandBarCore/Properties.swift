@@ -261,6 +261,14 @@ public struct ItemProps: Equatable {
     public var scrollTexts = false
     public var script = ""
     public var clickScript = ""
+    /// a left click shows the frontmost app's menus: as a second row of this bracket's glass,
+    /// or (`on`, no such bracket) as a menu with the status extras; "": off
+    public var menubar = ""
+    /// a menu bar extra (`wifi`, `battery`, `controlcenter`, or a word of a third-party
+    /// one's name): a left click opens its own menu, in place of `click_script`
+    public var menuExtra = ""
+    /// the menu bar's glass: 0 its bracket's tint, up to 1 opaque (black, white in light mode)
+    public var menubarOpacity = 0.0
     /// seconds between `routine` updates, 0: none
     public var updateFreq = 0.0
     /// on | off | when_shown
@@ -323,6 +331,16 @@ public struct ItemProps: Equatable {
             case "click_script":
                 clickScript = value
                 return nil
+            case "menu_extra":
+                menuExtra = value
+                return nil
+            case "menubar_opacity":
+                if let error = Value.setNumber(&menubarOpacity, value, minimum: 0) { return error }
+                menubarOpacity = min(1, menubarOpacity)
+                return nil
+            case "menubar":
+                menubar = ["off", "false", "no", "0"].contains(value) ? "" : value
+                return nil
             case "update_freq": return Value.setNumber(&updateFreq, value, minimum: 0)
             case "updates":
                 if value == "when_shown" {
@@ -370,6 +388,7 @@ public struct ItemProps: Equatable {
             "drawing": drawing ? "on" : "off", "position": position, "associated_display": display, "associated_space": space,
             "ignore_association": ignoreAssociation ? "on" : "off", "y_offset": yOffset,
             "width": width.map { $0 as Any } ?? "dynamic", "blur_radius": blurRadius, "scroll_texts": scrollTexts ? "on" : "off",
+            "menubar": menubar.isEmpty ? "off" : menubar, "menubar_opacity": menubarOpacity, "menu_extra": menuExtra,
             "background": background.json,
         ]
     }

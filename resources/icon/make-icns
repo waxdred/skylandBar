@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# resources/SkylandBar.icns and icon.png from skyland's icon plus a bar badge (make-icon.swift).
+# With a binary (skylandbar, signed): it gets the icon (Finder, Privacy & Security's lists).
+set -euo pipefail
+cd "$(dirname "$0")"
+tmp="$(mktemp -d)"
+swiftc -O make-icon.swift -o "$tmp/make-icon"
+"$tmp/make-icon" "$HOME/code/hyperland/skyland/resources/Skyland.icns" "$tmp/icon.png"
+set="$tmp/SkylandBar.iconset"; mkdir "$set"
+for s in 16 32 128 256 512; do
+    sips -z $s $s "$tmp/icon.png" --out "$set/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s * 2)) $((s * 2)) "$tmp/icon.png" --out "$set/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$set" -o ../SkylandBar.icns
+cp "$tmp/icon.png" ../icon.png
+rm -rf "$tmp"
+echo "resources/SkylandBar.icns"
+if [ $# -gt 0 ]; then
+    osascript -l JavaScript -e "ObjC.import('AppKit'); \$.NSWorkspace.sharedWorkspace.setIconForFileOptions(\$.NSImage.alloc.initWithContentsOfFile('$PWD/../SkylandBar.icns'), '$1', 0)" >/dev/null
+    echo "$1"
+fi
