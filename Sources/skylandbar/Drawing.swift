@@ -841,6 +841,9 @@ final class FrameTicker: NSObject {
         super.init()
         if let view {
             let link = view.displayLink(target: self, selector: #selector(step))
+            // 60 at most: on a 120 Hz display each frame moved Apple's glass views, the bar's
+            // main cost while switching workspaces
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
             link.add(to: .main, forMode: .common)
             self.link = link
         } else {
