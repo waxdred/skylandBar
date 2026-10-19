@@ -166,9 +166,12 @@ final class GlassRim: CALayer {
     private let inner = CAGradientLayer(), innerMask = CAShapeLayer()
     /// colors along the diagonal, inside the shape (a lens's)
     private let sheen = CAGradientLayer(), sheenMask = CAShapeLayer()
+    /// the group's tint, over the glass and under the rim (Apple's glass ignores its own)
+    private let tint = CAShapeLayer()
 
     override init() {
         super.init()
+        addSublayer(tint)
         sheen.mask = sheenMask
         sheen.startPoint = CGPoint(x: 0, y: 0)
         sheen.endPoint = CGPoint(x: 1, y: 1)
@@ -192,7 +195,7 @@ final class GlassRim: CALayer {
     /// row) get one rim around them all: their glass is one.
     /// `colors` (0...1): the rim and a sheen in colors along the diagonal, cyan, magenta,
     /// yellow, as light split by the glass (a lens's: its shape shows as it moves).
-    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double = 0) {
+    func set(_ shapes: [(rect: NSRect, radius: Double)], strength: Double, colors: Double = 0, fill: ARGB? = nil) {
         let rect = shapes.map(\.rect).reduce(shapes[0].rect) { $0.union($1) }
         frame = rect
         let bounds = CGRect(origin: .zero, size: rect.size)
@@ -204,6 +207,9 @@ final class GlassRim: CALayer {
             }.reduce(nil as CGPath?) { $0?.union($1) ?? $1 }!
             return shapes.count > 1 ? Self.rounded(joined, CGFloat(Self.fillet)) : joined
         }
+        tint.frame = bounds
+        tint.path = path(0)
+        tint.fillColor = fill.flatMap { $0.alpha > 0 ? Fonts.color($0).cgColor : nil }
         outer.frame = bounds; outerMask.frame = bounds
         inner.frame = bounds; innerMask.frame = bounds
         outerMask.path = path(0.5)
