@@ -163,7 +163,9 @@ final class SystemGlass: GlassRenderer {
         Glass.setSpacing(drops.holder, 12) // the neck melts into the drop and the lens: thick where it joins them
         place(groupShapes, in: bodies.holder, views: &bodyViews)
         // Apple's tint is dense: a drop at half its tint keeps what is behind showing through it
-        place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32(d.tint.alpha * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
+        // half the tint (Apple's is dense), its strength in steps: the item's color fades in over
+        // its animation, and every new tint rebuilds the glass
+        place(dropShapes.map { var d = $0; d.tint = ARGB(UInt32((d.tint.alpha * 4).rounded() / 4 * 0.5 * 255) << 24 | d.tint.value & 0xFFFFFF); return d },
               in: drops.holder, views: &dropViews, keep: true)
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
@@ -227,6 +229,9 @@ final class SystemGlass: GlassRenderer {
         for (glass, shape) in zip(views, shapes) {
             glass.frame = shape.rect
             Glass.update(glass, style: shape.style, tint: shape.tint, cornerRadius: shape.radius)
+            // a new tint rebuilds Apple's glass filter at the next layout: now, so skylandbar's
+            // values (GlassLook, right after) go on the new one; else a frame of the frosted look
+            glass.layoutSubtreeIfNeeded()
         }
     }
 }
