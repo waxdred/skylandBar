@@ -921,8 +921,11 @@ final class BarApp {
         guard let menuBar, let trigger = model.item(named: menuBar.trigger) else { return 0 }
         let own = model.displayed(trigger).background.height
         let height = own > 0 ? own : model.item(named: menuBar.bracket).map { model.displayed($0).background.height } ?? model.bar.height - 4
-        return (height + model.bar.glassSpacing + 2) * max(0, min(1, menuProgress / 0.45))
+        return (height + (menuGap ?? model.bar.glassSpacing + 2)) * max(0, min(1, menuProgress / 0.45))
     }
+
+    /// the gap withMenuBar keeps between the rows (the item's own off the bracket)
+    private var menuGap: Double?
 
     /// The open menu bar, as one shape of glass with the item that has `menubar`: its bubble
     /// drops down a row (a drop of glass, 0...0.45 of the spring), then a row runs right from
@@ -935,8 +938,11 @@ final class BarApp {
         var items = items
         let trigger = items[index]
         let bracket = items.first { $0.name == menuBar.bracket }
-        let gap = model.bar.glassSpacing + 2
         let height = trigger.props.background.height > 0 ? trigger.props.background.height : bracket?.props.background.height ?? row - 4
+        // the row runs as far under the bracket as the item stands off it: the same gap both
+        // ways (the item's padding_right sets it); glass_spacing + 2 without a bracket
+        let gap = bracket.map { max(2, $0.x - (trigger.x + trigger.length)) } ?? model.bar.glassSpacing + 2
+        menuGap = gap
         let p = menuProgress
         let drop = max(0, min(1, p / 0.45)), run = max(0, (p - 0.35) / 0.65) // run overshoots with the spring
         let down = (height + gap) * drop
@@ -947,6 +953,8 @@ final class BarApp {
         let opacity = model.displayed(item).menubarOpacity
         if opacity > 0 { glass.color = ARGB(UInt32((opacity * 255).rounded()) << 24 | (Self.appearance == "dark" ? 0 : 0xFF_FFFF)) }
         glass.cornerRadius = height / 2
+        // the L's inner corner: concentric to the bracket's capsule, its radius plus the gap
+        glass.fillet = (bracket?.props.background.height ?? height) / 2 + gap
         var props = trigger.props
         props.background.glass = "off" // its hover glass: the drop's now
         items[index] = PlacedItem(name: trigger.name, kind: trigger.kind, x: trigger.x, length: trigger.length, top: trigger.top,

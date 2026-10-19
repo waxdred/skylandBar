@@ -76,6 +76,9 @@ public struct ImageProps: Equatable {
 }
 
 public struct BackgroundProps: Equatable {
+    /// not a setting: the radius of the inner corners where its glass meets the other shapes of
+    /// its group (the menu bar's L, concentric to the workspaces); 0, the rim's default
+    public var fillet = 0.0
     public var drawing = false
     public var color = ARGB.clear
     public var borderColor = ARGB.clear
