@@ -154,6 +154,8 @@ final class BarApp {
     }
 
     private func apply(_ outcome: Outcome) {
+        // a swipe sent by hand (--trigger skyland_workspace_swipe ...): as skyland's, to test the lens
+        for trigger in outcome.triggered where trigger.event == "skyland_workspace_swipe" { swiped(trigger.env) }
         if outcome.exit { return quit() }
         if outcome.reload { return reload(outcome.reloadPath) }
         if let on = outcome.hotload { setHotload(on) }

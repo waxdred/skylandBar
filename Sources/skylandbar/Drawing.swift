@@ -782,7 +782,9 @@ final class BarWindow {
             shapes[index].tail = tails[offset].map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
         }
         glass?.update(shapes, settings: glassSettings, window: panel)
-        view.drops = shapes.filter { $0.style == "lens" || $0.style == "hover" }
+        // the glyphs drawn magnified through a drop: the metal engine's; Apple's glass magnifies
+        // what is behind itself, and with it they looked dimmed under a moving lens
+        view.drops = glassEngine != "metal" ? [] : shapes.filter { $0.style == "lens" || $0.style == "hover" }
             .map { ($0.rect, $0.lift, $0.style == "hover" ? 0.55 : 1.0) }
         if moving && lensTicker == nil {
             lensTicker = FrameTicker(view: panel.isVisible ? view : nil) { [weak self] in self?.drawGlass() }

@@ -154,6 +154,7 @@ final class SystemGlass: GlassRenderer {
                 drop.rect = NSRect(x: tail.midX - side / 2, y: tail.midY - side / 2, width: side, height: side)
                 drop.radius = Double(side) / 2
                 drop.tail = nil
+                drop.style = "tail" // no rim: Apple's glass melts it into the lens, a rim would not
                 dropShapes.append(drop)
                 if let neck = neck(from: tail, to: shape) { dropShapes.append(neck) }
             }
@@ -167,7 +168,7 @@ final class SystemGlass: GlassRenderer {
         GlassLook.apply(bodies.container, settings: settings,
                         height: groupShapes.map { Double(min($0.rect.width, $0.rect.height)) }.min() ?? 36)
         // the double rims, over all the glass
-        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.filter { $0.style != "neck" }.map { ($0, 1.5 + 0.5 * $0.lift) }
+        let rimmed = groupShapes.map { ($0, 1.0) } + dropShapes.filter { $0.style == "lens" || $0.style == "hover" }.map { ($0, 1.5 + 0.5 * $0.lift) }
         while rims.count > rimmed.count { rims.removeLast().removeFromSuperlayer() }
         while rims.count < rimmed.count {
             let rim = GlassRim()

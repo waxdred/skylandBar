@@ -32,12 +32,19 @@ public struct ScriptRun: Equatable {
 }
 
 /// What a message did, for the app to carry out.
+public struct TriggeredEvent: Equatable {
+    public var event: String
+    public var env: [String: String]
+}
+
 public struct Outcome: Equatable {
     public var output = ""
     /// "[!]" errors fail the call (exit status 1), "[?]" warnings do not
     public var errors: [String] = []
     public var failed: Bool { errors.contains { $0.hasPrefix("[!]") } }
     public var scripts: [ScriptRun] = []
+    /// the events --trigger sent, with their variables (the app acts on some itself)
+    public var triggered: [TriggeredEvent] = []
     /// items or the bar look changed
     public var redraw = false
     /// bar windows: frame, level, displays
@@ -299,6 +306,7 @@ public final class BarModel {
                 var vars: [String: String] = [:]
                 for prop in env { vars[prop.key] = prop.value }
                 o.scripts += scripts(for: event, info: vars["INFO"] ?? "", env: vars)
+                o.triggered.append(TriggeredEvent(event: event, env: vars))
             case .remove(let target):
                 let matches = Set(indices(matching: target))
                 if matches.isEmpty { return o.errors.append(noMatch("Remove", target)) }
