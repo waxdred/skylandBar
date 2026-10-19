@@ -306,15 +306,33 @@ final class BarApp {
     }
 
     /// Another window has the focus: `display=active` items and `hidden=current` follow
-    /// its display. Looked up again a moment later, for a window still opening.
-    private func focusChanged(again: Bool = true) {
+    /// its display. Looked up again a moment later, for a window still opening. A burst of
+    /// events (a workspace switch sends 3 or 4) looks once, and once again after the last:
+    /// each looked up every window on screen.
+    private func focusChanged() {
+        focusWork?.cancel()
+        if !focusPending {
+            focusPending = true
+            DispatchQueue.main.async { [weak self] in
+                self?.focusPending = false
+                self?.lookUpFocus()
+            }
+        }
+        let again = DispatchWorkItem { [weak self] in self?.lookUpFocus() }
+        focusWork = again
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: again)
+    }
+
+    private var focusPending = false
+    private var focusWork: DispatchWorkItem?
+
+    private func lookUpFocus() {
         let display = Windows.focusedDisplay()
         if display != nil && display != focusedDisplay {
             focusedDisplay = display
             if model.bar.hidden == "current" { configureWindows() } else { setNeedsLayout() }
         }
         checkSpaceWindows()
-        if again { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.focusChanged(again: false) } }
     }
 
     // MARK: space_windows_change
