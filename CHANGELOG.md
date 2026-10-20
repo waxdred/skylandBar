@@ -2,6 +2,12 @@
 
 Each `## vX.Y.Z` section is also the text of its GitHub release.
 
+## v0.13.1
+
+- The open menu bar's L: the row stands as far under the workspaces as the skyland icon
+  stands off them (its `padding_right` sets both gaps), its inner corner is concentric to
+  the workspaces' capsule and its outer corner to that one; the glass follows the round.
+
 ## v0.13.0
 
 **Menu bar in the bar**
