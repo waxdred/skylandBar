@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Release build of skylandbar, signed with the skyland-codesign identity when there is one
+# (skyland's bin/skyland-cert makes it): Accessibility (the menu bar in the bar) and the file
+# access rules of a security tool stay granted across rebuilds. Ad-hoc otherwise, as
+# `swift build` leaves it: each build is a new binary to allow again.
+# usage: scripts/build
+set -euo pipefail
+cd "$(dirname "$0")/.."
+swift build -c release
+bin="$(swift build -c release --show-bin-path)/skylandbar"
+identity=-
+security find-identity -v -p codesigning | grep -q '"skyland-codesign"' && identity=skyland-codesign
+codesign --force --sign "${SKYLAND_SIGN_IDENTITY:-$identity}" --identifier com.waxdred.skylandbar "$bin"
+echo "built $bin ($identity)"
