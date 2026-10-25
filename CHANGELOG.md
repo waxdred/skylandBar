@@ -2,6 +2,18 @@
 
 Each `## vX.Y.Z` section is also the text of its GitHub release.
 
+## Unreleased
+
+**Glyph theme**
+- `themes/glyph.toml`: black, white dots, one red (Nothing OS like, skyland's `ui-style = 'glyph'`;
+  palette after glyph-rice). Same variable names as liquid-glass.toml: a Liquid Glass config takes
+  it as it is. Colors from skyland's theme.env (`HIGHLIGHT`: the one red), else the dark palette.
+- `glass_engine = "flat"`: no glass, each glass shape an opaque panel in its tint with a thin line
+  and a faint dot grid; the selection lens a pill outlined in the tint's contrast color. Nothing
+  captured, no permission; never taken by `auto`.
+- Fonts next to the config (`fonts/`, `themes/fonts/`: .ttf / .otf) are registered for the bar
+  only at each config load. `themes/fonts` ships Space Mono and Doto (SIL OFL).
+
 ## v0.13.1
 
 - The open menu bar's L: the row stands as far under the workspaces as the skyland icon

@@ -406,6 +406,7 @@ final class BarApp {
     /// config that keeps running (SbarLua's event loop) gets that after 2 seconds.
     private func run(_ file: String) {
         scripts.configDir = (file as NSString).deletingLastPathComponent
+        Fonts.register(in: ["\(scripts.configDir)/fonts", "\(scripts.configDir)/themes/fonts"])
         if file.hasSuffix(".toml") { return load(file) }
         var forced = false
         let updates = model.updates

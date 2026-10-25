@@ -120,6 +120,17 @@ update_freq = 30
 script = 'skylandbar --set "$NAME" label="$(date +%H:%M)"'
 ```
 
+**Glyph** (`themes/glyph.toml`, skyland's `ui-style = 'glyph'`): black, white dots, one red, Nothing OS
+like. Include it in place of liquid-glass.toml and copy `themes/fonts` next to it (Space Mono and
+Doto, SIL OFL, registered for the bar only): a Liquid Glass config works as it is, its glass becomes
+opaque panels with a thin line and a dot grid (`glass_engine = "flat"`), the colors follow skyland's
+`glyph-dark` / `glyph-light` themes.
+
+```sh
+cp -R themes/glyph.toml themes/fonts ~/.config/skylandbar/themes/
+# skylandbar.toml: include = "themes/glyph.toml"
+```
+
 Or from a shell, a script, or a `sketchybarrc`:
 
 ```sh

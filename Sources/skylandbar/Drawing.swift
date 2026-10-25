@@ -38,6 +38,21 @@ enum Fonts {
         }
     }
 
+    private static var registered = Set<String>()
+
+    /// The .ttf / .otf files of these folders (next to the config: fonts/, themes/fonts/, e.g.
+    /// the glyph theme's Space Mono and Doto), for the bar only: nothing installed.
+    static func register(in folders: [String]) {
+        for folder in folders {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? [] where name.hasSuffix(".ttf") || name.hasSuffix(".otf") {
+                let path = "\(folder)/\(name)"
+                guard registered.insert(path).inserted else { continue }
+                CTFontManagerRegisterFontsForURL(URL(fileURLWithPath: path) as CFURL, .process, nil)
+            }
+        }
+        cache.removeAll() // a family asked before it was there: CoreText's fallback was kept
+    }
+
     static func color(_ color: ARGB) -> NSColor {
         NSColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
     }
