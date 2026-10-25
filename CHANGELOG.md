@@ -2,7 +2,7 @@
 
 Each `## vX.Y.Z` section is also the text of its GitHub release.
 
-## Unreleased
+## v0.14.0
 
 **Glyph theme**
 - `themes/glyph.toml`: black, white dots, one red (Nothing OS like, skyland's `ui-style = 'glyph'`;
@@ -13,6 +13,9 @@ Each `## vX.Y.Z` section is also the text of its GitHub release.
   captured, no permission; never taken by `auto`.
 - Fonts next to the config (`fonts/`, `themes/fonts/`: .ttf / .otf) are registered for the bar
   only at each config load. `themes/fonts` ships Space Mono and Doto (SIL OFL).
+- flat: touching panels drawn as one (the open menu bar's L: one outline, no inner lines),
+  see-through tints made opaque, one dot grid for the bar, brighter dots (16%).
+- The open menu bar no longer draws its trigger's hover tint as a square over the drop.
 
 ## v0.13.1
 
