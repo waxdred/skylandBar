@@ -1,0 +1,60 @@
+# Glyph: black, white dots, one red. A Nothing OS like bar, skyland's `ui-style = 'glyph'`
+# (palette after https://github.com/Nebelung-cloud/glyph-rice).
+#
+# Include it in place of liquid-glass.toml: include = "themes/glyph.toml". It keeps the same
+# variable names (glass_tint, hover, primary, secondary, accent...), so a config made for
+# Liquid Glass works as it is: its glass shapes become opaque panels.
+# What it applies:
+# - no glass: glass_engine = "flat" draws each glass shape as an opaque panel in its tint, a
+#   thin line and a faint dot grid; the selection (lens) a lighter pill, outlined.
+# - Space Mono for the text, Doto (dot matrix) in ${dots} for numbers: both in themes/fonts
+#   (SIL OFL), registered for the bar only. Copy that folder next to this file.
+# - colors from skyland's theme (theme.env, written by skyland-theme): with skyland's
+#   glyph-dark / glyph-light themes black, greys, white, and one red (HIGHLIGHT) for the one
+#   live thing. Without skyland, the dark glyph palette.
+
+vars_file = "~/.cache/skyland/theme.env"
+
+[vars]
+font = "Space Mono"
+dots = "Doto"
+radius_large = 20
+radius_row = 14
+radius_small = 10
+spring = 18
+primary = "${TEXT:-0xfff2f2f2}"          # text, on, focus
+secondary = "${TEXT_DIM:-0xff8c8c8c}"    # labels
+tertiary = "${BORDER:-0xff2a2a2a}"       # lines, dots off
+accent = "${ACCENT:-0xfff2f2f2}"
+red = "${HIGHLIGHT:-0xffd71921}"         # at most one thing on screen, and only a live one
+green = "0xff9bb59a"
+orange = "0xffd9c38a"
+purple = "0xffb79bc2"
+shadow = "0x00000000"
+glass_tint = "${ITEM_BG:-0xff1a1a1a}"    # the panels (opaque)
+hover = "${ITEM_BG_ACTIVE:-0xff2a2a2a}"
+accent_soft = "${ITEM_BG_ACTIVE:-0xff2a2a2a}" # the selection's pill
+
+[bar]
+color = "0x00000000"
+glass = "off"
+blur_radius = 0
+height = 40
+margin = 8
+y_offset = 4
+padding_left = 8
+padding_right = 8
+corner_radius = 20
+glass_spacing = 8
+glass_engine = "flat"
+glass_lens_response = 0.35 # the selection slides on a spring (ease-out, no bounce: glyph's glide)
+glass_lens_bounce = 0
+glass_lens_stretch = 0
+motion = "auto"
+font_smoothing = false
+
+[defaults]
+icon = { font = "${font}:Bold:13", color = "${primary}", padding_left = 12, padding_right = 4 }
+label = { font = "${font}:Regular:12", color = "${primary}", padding_right = 12 }
+background = { height = 28, corner_radius = "concentric", drawing = false }
+popup = { y_offset = 8, height = 32, align = "center", background = { glass = "regular", corner_radius = "${radius_large}", drawing = true } }

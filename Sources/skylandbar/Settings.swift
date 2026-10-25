@@ -39,7 +39,7 @@ private let settingGroups: [(title: String, fields: [SettingField])] = [
         SettingField(place: .bar, key: "topmost", label: "Above windows", kind: .choice(["off", "window", "on"])),
     ]),
     ("Glass", [
-        SettingField(place: .bar, key: "glass_engine", label: "Engine", kind: .choice(["auto", "system", "metal", "backdrop"])),
+        SettingField(place: .bar, key: "glass_engine", label: "Engine", kind: .choice(["auto", "system", "metal", "backdrop", "flat"])),
         SettingField(place: .bar, key: "glass_refraction", label: "Refraction", kind: .number(0 ... 10, step: 0.5, unit: "pt")),
         SettingField(place: .bar, key: "glass_blur", label: "Blur", kind: .number(0 ... 12, step: 0.5, unit: "pt")),
         SettingField(place: .bar, key: "glass_saturation", label: "Saturation", kind: .number(0.5 ... 3, step: 0.1, unit: "x")),

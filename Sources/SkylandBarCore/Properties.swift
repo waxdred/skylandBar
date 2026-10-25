@@ -601,7 +601,7 @@ public struct BarProps: Equatable {
             case "border_color": return Value.setColor(&borderColor, value, part: rest)
             case "border_width": return Value.setNumber(&borderWidth, value, minimum: 0)
             case "glass_spacing": return Value.setNumber(&glassSpacing, value, minimum: 0)
-            case "glass_engine": return Value.oneOf(&glassEngine, value, ["auto", "native", "system", "metal", "backdrop"])
+            case "glass_engine": return Value.oneOf(&glassEngine, value, ["auto", "native", "system", "metal", "backdrop", "flat"])
             case "glass_refraction": return Value.setNumber(&glassRefraction, value, minimum: 0)
             case "glass_blur": return Value.setNumber(&glassBlur, value, minimum: 0)
             case "glass_saturation": return Value.setNumber(&glassSaturation, value, minimum: 0)

@@ -77,7 +77,7 @@ warnings: a `/regex/` that matches nothing, `--add` of an item that is already t
 | `shadow` | off | the window's shadow |
 | `font_smoothing` | off | |
 | `glass` | `off` | `regular`, `clear`, `off`: the whole bar as glass |
-| `glass_engine` | `auto` | `auto`, `system`, `metal`, `backdrop`: see [liquid-glass.md](liquid-glass.md) |
+| `glass_engine` | `auto` | `auto`, `system`, `metal`, `backdrop`: see [liquid-glass.md](liquid-glass.md); `flat`: no glass, opaque panels (themes/glyph.toml) |
 | `glass_refraction` | 14 | points the edges bend what is behind (`metal`; at most a shape's half height / 2.2) |
 | `glass_blur` | 2 | points (`metal`) |
 | `glass_saturation` | 1.5 | (`metal`) |

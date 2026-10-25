@@ -10,6 +10,8 @@ import SkylandBarCore
 //             and shapes that melt together when closer than glass_spacing (any macOS)
 //   backdrop  Core Animation's backdrop layer (blur, saturation) under highlight layers:
 //             no refraction, no permission
+//   flat      no glass: opaque panels in their tint, a thin line, a faint dot grid (the
+//             glyph theme, Nothing OS like); never taken by auto
 // `glass_engine=auto` takes the first one this Mac can do.
 
 /// One glass shape, in the window's flipped coordinates (points).
@@ -95,6 +97,7 @@ enum GlassEngine {
             case "native": engine = NativeGlassSupport.available ? "native" : resolve("auto")
             case "system": engine = systemAvailable ? "system" : resolve("auto")
             case "backdrop": engine = "backdrop"
+            case "flat": engine = "flat"
             case "metal":
                 engine = MetalGlass.isAvailable ? "metal" : "backdrop"
                 if engine != "metal" && !asked { // ask once; macOS wants the bar restarted after
@@ -118,6 +121,7 @@ enum GlassEngine {
             case "native": return NativeGlassSupport.make() ?? SystemGlass()
             case "system": return SystemGlass()
             case "metal": return MetalGlass() ?? BackdropGlass()
+            case "flat": return FlatGlass()
             default: return BackdropGlass()
         }
     }
@@ -473,5 +477,62 @@ private final class BackdropShapeLayer: CALayer {
     private static func set(_ object: NSObject, _ key: String, _ value: Any) {
         let setter = NSSelectorFromString("set" + key.prefix(1).uppercased() + key.dropFirst() + ":")
         if object.responds(to: setter) { object.setValue(value, forKey: key) }
+    }
+}
+
+// MARK: flat
+
+/// `glass_engine = flat` (themes/glyph.toml): each glass shape an opaque panel in its tint
+/// with a thin line and a faint dot grid; a lens (the selection) and a hover drop a pill in
+/// their tint, the lens outlined. Line and dots are the tint's contrast color (white on a
+/// dark tint, black on a light one), so a theme only sets the tints. Nothing captured.
+final class FlatGlass: GlassRenderer {
+    private let flat = FlatGlassView()
+    var view: NSView { flat }
+    let failed = false
+
+    func update(_ shapes: [GlassShape], settings: GlassSettings, window: NSWindow) {
+        flat.shapes = shapes
+    }
+}
+
+private final class FlatGlassView: NSView {
+    var shapes: [GlassShape] = [] { didSet { if shapes != oldValue { needsDisplay = true } } }
+
+    override var isFlipped: Bool { true } // the shapes' coordinates
+    override func hitTest(_ point: NSPoint) -> NSView? { nil } // the items' view takes the mouse
+
+    override func draw(_ dirtyRect: NSRect) {
+        for shape in shapes {
+            let tint = Fonts.color(shape.tint)
+            let light = (0.299 * shape.tint.red + 0.587 * shape.tint.green + 0.114 * shape.tint.blue) > 0.5
+            let ink = light ? NSColor.black : NSColor.white
+            let radius = min(CGFloat(shape.radius), shape.rect.height / 2)
+            let path = NSBezierPath(roundedRect: shape.rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
+            tint.setFill()
+            path.fill()
+            switch shape.style {
+                case "lens":
+                    ink.withAlphaComponent(0.85).setStroke()
+                    path.lineWidth = 1.5
+                    path.stroke()
+                case "hover":
+                    break
+                default:
+                    NSGraphicsContext.saveGraphicsState()
+                    path.addClip()
+                    ink.withAlphaComponent(0.08).setFill()
+                    let pitch: CGFloat = 6, dot: CGFloat = 1.2
+                    for y in stride(from: shape.rect.minY + pitch / 2, to: shape.rect.maxY, by: pitch) {
+                        for x in stride(from: shape.rect.minX + pitch / 2, to: shape.rect.maxX, by: pitch) {
+                            NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
+                        }
+                    }
+                    NSGraphicsContext.restoreGraphicsState()
+                    ink.withAlphaComponent(0.16).setStroke()
+                    path.lineWidth = 1
+                    path.stroke()
+            }
+        }
     }
 }

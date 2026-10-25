@@ -807,6 +807,7 @@ final class LiquidGlassTests: XCTestCase {
         var bar = BarProps()
         XCTAssertNil(bar.apply("glass_spacing", "8"))
         XCTAssertEqual(bar.glassSpacing, 8)
+        XCTAssertNil(bar.apply("glass_engine", "flat")) // the glyph theme: no glass
         XCTAssertNil(bar.apply("glass_engine", "metal"))
         XCTAssertNotNil(bar.apply("glass_engine", "opengl"))
         XCTAssertNil(bar.apply("glass_refraction", "20"))
