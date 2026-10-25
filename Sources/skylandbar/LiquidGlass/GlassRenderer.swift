@@ -503,35 +503,57 @@ private final class FlatGlassView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil } // the items' view takes the mouse
 
     override func draw(_ dirtyRect: NSRect) {
-        for shape in shapes {
+        // the panels as one: shapes that touch (the menu bar's L) melt in glass, so lines
+        // only around their union and one dot grid over it, then the lenses and hovers
+        let panels = shapes.filter { $0.style != "lens" && $0.style != "hover" }
+        let path = { (shape: GlassShape, inset: CGFloat) -> NSBezierPath in
+            let radius = max(0, min(CGFloat(shape.radius), shape.rect.height / 2) - inset)
+            return NSBezierPath(roundedRect: shape.rect.insetBy(dx: inset, dy: inset), xRadius: radius, yRadius: radius)
+        }
+        let ink = { (shape: GlassShape) -> NSColor in
+            (0.299 * shape.tint.red + 0.587 * shape.tint.green + 0.114 * shape.tint.blue) > 0.5 ? .black : .white
+        }
+        // opaque: a see-through tint (menubar_opacity) would show the lines under it
+        let fill = { (shape: GlassShape) -> NSColor in
             let tint = Fonts.color(shape.tint)
-            let light = (0.299 * shape.tint.red + 0.587 * shape.tint.green + 0.114 * shape.tint.blue) > 0.5
-            let ink = light ? NSColor.black : NSColor.white
-            let radius = min(CGFloat(shape.radius), shape.rect.height / 2)
-            let path = NSBezierPath(roundedRect: shape.rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
-            tint.setFill()
-            path.fill()
-            switch shape.style {
-                case "lens":
-                    ink.withAlphaComponent(0.85).setStroke()
-                    path.lineWidth = 1.5
-                    path.stroke()
-                case "hover":
-                    break
-                default:
-                    NSGraphicsContext.saveGraphicsState()
-                    path.addClip()
-                    ink.withAlphaComponent(0.08).setFill()
-                    let pitch: CGFloat = 6, dot: CGFloat = 1.2
-                    for y in stride(from: shape.rect.minY + pitch / 2, to: shape.rect.maxY, by: pitch) {
-                        for x in stride(from: shape.rect.minX + pitch / 2, to: shape.rect.maxX, by: pitch) {
-                            NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
-                        }
-                    }
-                    NSGraphicsContext.restoreGraphicsState()
-                    ink.withAlphaComponent(0.16).setStroke()
-                    path.lineWidth = 1
-                    path.stroke()
+            return tint.alphaComponent > 0 ? tint.withAlphaComponent(1) : tint
+        }
+        for shape in panels {
+            fill(shape).setFill()
+            path(shape, 0.5).fill()
+        }
+        for shape in panels {
+            ink(shape).withAlphaComponent(0.2).setStroke()
+            path(shape, 0.5).stroke()
+        }
+        for shape in panels { // over the lines inside the other shapes
+            fill(shape).setFill()
+            path(shape, 1.5).fill()
+        }
+        if let first = panels.first {
+            let union = NSBezierPath()
+            for shape in panels { union.append(path(shape, 1.5)) }
+            union.windingRule = .nonZero
+            NSGraphicsContext.saveGraphicsState()
+            union.addClip()
+            ink(first).withAlphaComponent(0.16).setFill()
+            let pitch: CGFloat = 6, dot: CGFloat = 1.2, bounds = union.bounds
+            // one grid for the whole bar: overlapping shapes share their dots
+            for y in stride(from: (bounds.minY / pitch).rounded(.down) * pitch + pitch / 2, to: bounds.maxY, by: pitch) {
+                for x in stride(from: (bounds.minX / pitch).rounded(.down) * pitch + pitch / 2, to: bounds.maxX, by: pitch) {
+                    NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: y - dot / 2, width: dot, height: dot)).fill()
+                }
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        for shape in shapes where shape.style == "lens" || shape.style == "hover" {
+            Fonts.color(shape.tint).setFill()
+            let pill = path(shape, 0.5)
+            pill.fill()
+            if shape.style == "lens" {
+                ink(shape).withAlphaComponent(0.85).setStroke()
+                pill.lineWidth = 1.5
+                pill.stroke()
             }
         }
     }

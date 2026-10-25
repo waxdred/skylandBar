@@ -970,6 +970,7 @@ final class BarApp {
         glass.fillet = (bracket?.props.background.height ?? height) / 2 + gap
         var props = trigger.props
         props.background.glass = "off" // its hover glass: the drop's now
+        props.background.color = .clear // else its hover tint, without glass, a square (corner_radius 0)
         items[index] = PlacedItem(name: trigger.name, kind: trigger.kind, x: trigger.x, length: trigger.length, top: trigger.top,
                                   height: trigger.height, props: props, middle: trigger.middle)
         var label = model.displayed(item).label
