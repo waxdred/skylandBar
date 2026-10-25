@@ -146,7 +146,7 @@ skylandbar --export > ~/.config/skylandbar/skylandbar.toml   # a script config a
 ## Build from source
 
 ```sh
-swift build -c release
+swift build -c release   # or scripts/build: the same, signed with skyland-codesign when it exists
 swift test
 ```
 
