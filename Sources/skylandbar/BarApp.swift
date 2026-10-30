@@ -699,6 +699,10 @@ final class BarApp {
         view.onClick = { [unowned self, unowned view] name, button, modifier in
             if button == "left", let workspace = self.model.workspace(of: name) { SkylandSocket.run(["workspace", workspace]) }
             if name.hasPrefix("menubar.") { return self.dropMenu(name, in: view) }
+            if name.hasPrefix("notch.tab."), let notch = self.model.notch {
+                _ = self.handle(["--set", notch.name, "notch.tab=\(name.dropFirst("notch.tab.".count))"])
+                return
+            }
             if button == "left", let extra = self.model.item(named: name)?.props.menuExtra, !extra.isEmpty {
                 return AppMenu.pressExtra(extra) { pid in
                     self.menuBarCover.show(under: self.windows.map(\.panel), height: self.model.bar.height, menuOf: pid)
@@ -1124,7 +1128,30 @@ final class BarApp {
         // boringNotch's shape: closed, top curves 6 and bottom corners 14; open, 19 and 24
         let flare = option("closed_flare", 6), openFlare = option("flare", 19), padding = option("padding", 12)
         let row = option("row_height", place.rect.height)
-        let children = model.popupItems(of: notch.name).filter { $0.props.drawing }
+        // tabs: the items' `tab`s in order, a row of them on top; the items of the chosen one
+        // (notch.tab, else the first) and those with none
+        let all = model.popupItems(of: notch.name).filter { $0.props.drawing }
+        var tabs: [String] = []
+        for item in all where !item.props.tab.isEmpty && !tabs.contains(item.props.tab) { tabs.append(item.props.tab) }
+        let chosen = notch.options["tab"].flatMap { tabs.contains($0) ? $0 : nil } ?? tabs.first
+        let children = all.filter { $0.props.tab.isEmpty || $0.props.tab == chosen }
+        let tabItems = tabs.map { tab -> (name: String, props: ItemProps, length: Double) in
+            var props = ItemProps()
+            props.icon.drawing = false
+            props.label = model.defaults.label
+            props.label.drawing = true
+            props.label.string = tab
+            props.label.paddingLeft = 12
+            props.label.paddingRight = 12
+            if tab == chosen { // the lens: it flows to the next tab like a drop
+                props.background.drawing = true
+                props.background.glass = "lens"
+                props.background.height = row - 8
+                props.background.color = notch.options["tab_color"].flatMap(ARGB.parse) ?? ARGB(0x33FF_FFFF)
+            }
+            return ("notch.tab.\(tab)", props, Layout.length(of: props, measure: Fonts.width, image: Images.width))
+        }
+        let tabsWidth = tabItems.reduce(0) { $0 + $1.length }, tabsHeight = tabs.isEmpty ? 0 : row
         let props = children.map { model.displayed($0) }
         let middles = zip(children, props).map { middle($0, $1) }
         let lengths = zip(props, middles).map { Layout.length(of: $0, middle: $1, measure: Fonts.width, image: Images.width) }
@@ -1140,8 +1167,8 @@ final class BarApp {
         // closed: the camera's notch, or closed_width x closed_height (wider, it shows around it)
         let closed = (width: option("closed_width", Double(place.rect.width)) + 2 * flare,
                       height: option("closed_height", Double(place.rect.height)), radius: option("closed_corner_radius", 14))
-        let open = (width: max(option("width", 0), laid.width + 2 * padding) + 2 * openFlare,
-                    height: max(option("height", 0), closed.height + laid.height + padding),
+        let open = (width: max(option("width", 0), laid.width + 2 * padding, tabsWidth + 2 * padding) + 2 * openFlare,
+                    height: max(option("height", 0), closed.height + tabsHeight + laid.height + padding),
                     radius: option("corner_radius", 24))
         let p = notchProgress
         let width = max(closed.width, mix(closed.width, open.width, p)), height = mix(closed.height, open.height, p)
@@ -1169,7 +1196,13 @@ final class BarApp {
         }
         var items: [PlacedItem] = []
         if notchOpen && p >= 0.95 { // the items once it is (nearly) open, through the spring's overshoot
-            let left = (width - laid.width) / 2, top = closed.height + max(0, (height - closed.height - laid.height) / 2)
+            var x = (width - tabsWidth) / 2
+            for tab in tabItems {
+                items.append(PlacedItem(name: tab.name, kind: "item", x: x, length: tab.length, top: closed.height, height: row, props: tab.props))
+                x += tab.length
+            }
+            let below = closed.height + tabsHeight
+            let left = (width - laid.width) / 2, top = below + max(0, (height - below - laid.height) / 2)
             for index in children.indices {
                 guard let place = laid.places[children[index].name] else { continue }
                 items.append(placed(children[index], props[index], x: left + place.x, length: lengths[index], top: top + place.y, height: row,

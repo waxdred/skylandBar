@@ -270,6 +270,8 @@ public struct ItemProps: Equatable {
     /// a menu bar extra (`wifi`, `battery`, `controlcenter`, or a word of a third-party
     /// one's name): a left click opens its own menu, in place of `click_script`
     public var menuExtra = ""
+    /// in the notch: shown under this tab only (the notch's tabs row lists them); "": always
+    public var tab = ""
     /// the menu bar's glass: 0 its bracket's tint, up to 1 opaque (black, white in light mode)
     public var menubarOpacity = 0.0
     /// seconds between `routine` updates, 0: none
@@ -334,6 +336,9 @@ public struct ItemProps: Equatable {
             case "click_script":
                 clickScript = value
                 return nil
+            case "tab":
+                tab = value
+                return nil
             case "menu_extra":
                 menuExtra = value
                 return nil
@@ -391,7 +396,7 @@ public struct ItemProps: Equatable {
             "drawing": drawing ? "on" : "off", "position": position, "associated_display": display, "associated_space": space,
             "ignore_association": ignoreAssociation ? "on" : "off", "y_offset": yOffset,
             "width": width.map { $0 as Any } ?? "dynamic", "blur_radius": blurRadius, "scroll_texts": scrollTexts ? "on" : "off",
-            "menubar": menubar.isEmpty ? "off" : menubar, "menubar_opacity": menubarOpacity, "menu_extra": menuExtra,
+            "menubar": menubar.isEmpty ? "off" : menubar, "menubar_opacity": menubarOpacity, "menu_extra": menuExtra, "tab": tab,
             "background": background.json,
         ]
     }
