@@ -475,7 +475,7 @@ public final class BarModel {
                 guard value == "spring" || Curve(rawValue: value) != nil else {
                     return "'\(value)' is not spring or one of \(Curve.allCases.map(\.rawValue).joined(separator: ", "))"
                 }
-            case "bottom_right": // an item's name (position=popup.<notch>)
+            case "bottom_right", "tab": // an item's name (position=popup.<notch>); a tab's
                 break
             case "glass":
                 var glass = "off"
@@ -489,7 +489,7 @@ public final class BarModel {
                 items[index].options["open"] = open ? "on" : "off"
                 return nil
             default:
-                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare, bottom_right)"
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare, bottom_right, tab)"
         }
         items[index].options[option] = value
         return nil

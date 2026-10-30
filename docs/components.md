@@ -102,8 +102,21 @@ click_script = "skylandbar --settings"
 | `open_delay`, `close_delay` | 0.3, 0.1 | seconds after the mouse comes / leaves |
 | `animation` | `spring` | boringNotch's springs (a little past open, no bounce closing), or a curve with `animation_frames` (20) |
 | `bottom_right` | | an item of the notch put in its bottom right corner, out of the rows |
+| `tab` | the first | the tab shown (see below); a click on a tab sets it |
+| `tab_color` | `0x33ffffff` | the chosen tab's lens |
 | `open` | | `on`, `off`, `toggle`: from a script |
 | `fake` | off | `on`: a notch at the top middle of the main display when it has none (to try it on an external display) |
+
+Tabs: give the notch's items a `tab = "<name>"`; a row of the tabs (in the order they come)
+goes on top, the chosen one in a lens that flows to the next, and only that tab's items show
+under it (with the items that have no `tab`).
+
+```toml
+[[item]]
+name = "island.github"
+position = "popup.island"
+tab = "GitHub"
+```
 
 Items can subscribe to `notch_open` / `notch_close`. Without a notched display (and without
 `fake`), nothing shows. While open, the notch's window takes the clicks under it.
