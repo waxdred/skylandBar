@@ -1143,6 +1143,14 @@ final class BarApp {
             props.label.string = tab
             props.label.paddingLeft = 12
             props.label.paddingRight = 12
+            // notch.badge.<tab>: a count before its name ("" or 0: none)
+            if let badge = notch.options["badge.\(tab)"], !badge.isEmpty, badge != "0" {
+                props.icon = props.label
+                props.icon.string = badge
+                props.icon.color = notch.options["badge_color"].flatMap(ARGB.parse) ?? ARGB(0xFFFF_453A)
+                props.icon.paddingRight = 5
+                props.label.paddingLeft = 0
+            }
             if tab == chosen { // the lens: it flows to the next tab like a drop
                 props.background.drawing = true
                 props.background.glass = "lens"
@@ -1202,7 +1210,8 @@ final class BarApp {
                 x += tab.length
             }
             let below = closed.height + tabsHeight
-            let left = (width - laid.width) / 2, top = below + max(0, (height - below - laid.height) / 2)
+            // centered in notch.height's room; under tabs, right below them (a short tab: no gap)
+            let left = (width - laid.width) / 2, top = below + (tabs.isEmpty ? max(0, (height - below - laid.height) / 2) : 0)
             for index in children.indices {
                 guard let place = laid.places[children[index].name] else { continue }
                 items.append(placed(children[index], props[index], x: left + place.x, length: lengths[index], top: top + place.y, height: row,

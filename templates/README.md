@@ -8,6 +8,8 @@ Ready-made items to include in `skylandbar.toml`, each one file:
 | `battery.toml` | `battery`: level, charging, percent | Apple's battery menu: energy use, Low Power Mode |
 | `control-center.toml` | `controlcenter` | Apple's Control Center |
 | `github.toml` | `github`: the notch's GitHub tab, open PRs / issues (gh) | the PR or issue on GitHub |
+| `ci.toml` | `ci`: the notch's CI tab, last Actions run per repo, badge: failed | the run |
+| `notifications.toml` | `notifications`: the notch's Inbox tab, unread GitHub notifications, badge: unread | it on GitHub, marked read |
 
 ```toml
 include = ["themes/liquid-glass.toml", "templates/control-center.toml", "templates/battery.toml", "templates/wifi.toml"]

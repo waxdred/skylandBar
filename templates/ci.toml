@@ -1,0 +1,44 @@
+# The notch's CI tab: the latest GitHub Actions run of your 6 last pushed repos (yours and your
+# organizations', gh), its state as a colored icon; a click opens the run. The tab's badge: the
+# failed ones. Refreshed when the notch opens and every 2 minutes. Needs `gh auth login`.
+# Include it: include = ["themes/liquid-glass.toml", "templates/ci.toml"]
+# vars: notch (the notch item, default island), nerd (a Nerd Font for the icons)
+
+[[item]]
+name = "ci"
+position = "popup.${notch:-island}"
+tab = "CI"
+icon = { string = "", font = "${nerd:-Hack Nerd Font}:Bold:14", padding_left = 12, padding_right = 8 }
+label = { string = "…", font = "${font:-SF Pro}:Semibold:13", color = "${secondary:-0xaaffffff}", padding_right = 12 }
+update_freq = 120
+updates = "on"                 # its badge stays current with the notch closed
+subscribe = "notch_open"
+click_script = "open https://github.com/actions"
+background = { drawing = true, color = "0x00000000", height = 22, corner_radius = 11 }
+hover = { background.glass = "hover", background.color = "${hover:-0x24ffffff}" }
+# its rows: items ci.N, made again on each run
+script = '''
+args=() i=0 failed=0
+for repo in $(gh api "user/repos?sort=pushed&per_page=6" --jq '.[].full_name'); do
+  IFS=$'\t' read -r workflow branch status conclusion url < <(gh api "repos/$repo/actions/runs?per_page=1" \
+    --jq '.workflow_runs[0] // empty | [.name, .head_branch, .status, (.conclusion // ""), .html_url] | @tsv')
+  [ -z "$url" ] && continue
+  case "$status/$conclusion" in
+    completed/success) icon= color=0xff30d158 ;;
+    completed/failure|completed/timed_out) icon= color=0xffff453a failed=$((failed + 1)) ;;
+    completed/*) icon= color=0x66ffffff ;;  # cancelled, skipped
+    *) icon= color=0xffffd60a ;;            # queued, in progress
+  esac
+  args+=(--add item "ci.$i" popup.${notch:-island}
+    --set "ci.$i" tab=CI icon="$icon" icon.font="${nerd:-Hack Nerd Font}:Bold:13" icon.color="$color"
+      label="${repo#*/}  $workflow · $branch" click_script="open '$url'"
+      icon.padding_left=12 icon.padding_right=8 label.font="${font:-SF Pro}:Regular:12"
+      label.max_chars=64 label.padding_right=12
+      background.drawing=on background.color=0x00000000 background.height=22 background.corner_radius=11
+      hover.background.glass=hover hover.background.color=${hover:-0x24ffffff})
+  i=$((i + 1))
+done
+skylandbar --set "$NAME" label="$i repos · $failed failed" --set ${notch:-island} notch.badge.CI=$failed
+skylandbar --remove '/^ci\.[0-9]+$/' 2>/dev/null
+[ ${#args[@]} -gt 0 ] && skylandbar "${args[@]}"
+'''

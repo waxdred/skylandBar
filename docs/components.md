@@ -104,6 +104,8 @@ click_script = "skylandbar --settings"
 | `bottom_right` | | an item of the notch put in its bottom right corner, out of the rows |
 | `tab` | the first | the tab shown (see below); a click on a tab sets it |
 | `tab_color` | `0x33ffffff` | the chosen tab's lens |
+| `badge.<tab>` | | a count before that tab's name (`""` or `0`: none), from a script: `--set island notch.badge.GitHub=3` |
+| `badge_color` | `0xffff453a` | the badges' color |
 | `open` | | `on`, `off`, `toggle`: from a script |
 | `fake` | off | `on`: a notch at the top middle of the main display when it has none (to try it on an external display) |
 

@@ -469,7 +469,7 @@ public final class BarModel {
             case "width", "height", "corner_radius", "padding", "row_height", "open_delay", "close_delay", "animation_frames", "flare",
                  "closed_width", "closed_height", "closed_corner_radius", "closed_flare":
                 guard let number = Double(value), number >= 0 else { return "'\(value)' is not a number from 0" }
-            case "color":
+            case "color", "badge_color":
                 guard ARGB.parse(value) != nil else { return "'\(value)' is not a color (0xAARRGGBB)" }
             case "animation":
                 guard value == "spring" || Curve(rawValue: value) != nil else {
@@ -488,8 +488,10 @@ public final class BarModel {
                 guard let open = Value.bool(value, current: items[index].options["open"] == "on") else { return "'\(value)' is not on, off or toggle" }
                 items[index].options["open"] = open ? "on" : "off"
                 return nil
+            case _ where option.hasPrefix("badge."): // badge.<tab>: a count on that tab
+                break
             default:
-                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare, bottom_right, tab)"
+                return "unknown option (width, height, corner_radius, padding, row_height, color, open_delay, close_delay, animation, animation_frames, horizontal, fake, open, glass, flare, closed_width, closed_height, closed_corner_radius, closed_flare, bottom_right, tab, badge.<tab>, badge_color)"
         }
         items[index].options[option] = value
         return nil
