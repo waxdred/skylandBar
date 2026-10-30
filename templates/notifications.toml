@@ -1,0 +1,44 @@
+# The notch's Inbox tab: your unread GitHub notifications (reviews asked, mentions, your PRs and
+# issues...), the latest 10; a click opens it on GitHub and marks it read. The tab's badge: how
+# many are unread. Refreshed when the notch opens and every 2 minutes. Needs `gh auth login`.
+# Include it: include = ["themes/liquid-glass.toml", "templates/notifications.toml"]
+# vars: notch (the notch item, default island), nerd (a Nerd Font for the icons)
+
+[[item]]
+name = "notifications"
+position = "popup.${notch:-island}"
+tab = "Inbox"
+icon = { string = "", font = "${nerd:-Hack Nerd Font}:Bold:14", padding_left = 12, padding_right = 8 }
+label = { string = "…", font = "${font:-SF Pro}:Semibold:13", color = "${secondary:-0xaaffffff}", padding_right = 12 }
+update_freq = 120
+updates = "on"                 # its badge stays current with the notch closed
+subscribe = "notch_open"
+click_script = "open https://github.com/notifications"
+background = { drawing = true, color = "0x00000000", height = 22, corner_radius = 11 }
+hover = { background.glass = "hover", background.color = "${hover:-0x24ffffff}" }
+# its rows: items notif.N, made again on each run
+script = '''
+rows=$(gh api notifications --jq 'length, (.[0:10][] | [.id, .repository.name, .subject.type, .subject.title, .reason,
+  ((.subject.url // .repository.url) | sub("api.github.com/repos"; "github.com") | sub("/pulls/"; "/pull/") | sub("/commits/"; "/commit/"))] | @tsv)')
+count=$(head -1 <<<"$rows")
+skylandbar --set "$NAME" label="$count unread" --set ${notch:-island} notch.badge.Inbox=$count
+args=() i=0
+while IFS=$'\t' read -r id repo type title reason url; do
+  case "$type" in
+    PullRequest) icon= color=0xff30d158 ;;
+    Issue) icon= color=0xffbf5af2 ;;
+    *) icon= color=0xaaffffff ;;
+  esac
+  [ "$reason" = review_requested ] && color=0xffffd60a  # waiting on you
+  args+=(--add item "notif.$i" popup.${notch:-island}
+    --set "notif.$i" tab=Inbox icon="$icon" icon.font="${nerd:-Hack Nerd Font}:Bold:13" icon.color="$color"
+      label="$repo  $title" click_script="gh api -X PATCH notifications/threads/$id; open '$url'"
+      icon.padding_left=12 icon.padding_right=8 label.font="${font:-SF Pro}:Regular:12"
+      label.max_chars=64 label.padding_right=12
+      background.drawing=on background.color=0x00000000 background.height=22 background.corner_radius=11
+      hover.background.glass=hover hover.background.color=${hover:-0x24ffffff})
+  i=$((i + 1))
+done < <(tail -n +2 <<<"$rows")
+skylandbar --remove '/^notif\.[0-9]+$/' 2>/dev/null
+[ ${#args[@]} -gt 0 ] && skylandbar "${args[@]}"
+'''
